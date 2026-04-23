@@ -28,6 +28,8 @@ This repo provides a foundational, opinionated architecture for how a typical ap
 
 ## Related Red Hat Resources
 
-- [Red Hat Architecture and Design Patterns](https://developers.redhat.com/topics/red-hat-architecture-and-design-patterns)
-- [OpenShift Reference Architecture Implementation Guides](https://www.redhat.com/en/blog/openshift-container-platform-reference-architecture-implementation-guides)
-- [Cloud-Native Application Architecture (Red Hat Blog)](https://www.redhat.com/en/blog/how-implement-cloud-native-application-architecture)
+- [OCP 4.21 Architecture Documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html/architecture/index) — current platform architecture reference
+- [Validated Patterns](https://validatedpatterns.io/patterns/) — GitOps-based, tested application stacks maintained across product lifecycles
+- [Multicloud GitOps Pattern](https://validatedpatterns.io/patterns/multicloud-gitops/) — foundational pattern for GitOps-driven multi-cluster app management
+- [Multicluster DevSecOps Pattern](https://validatedpatterns.io/patterns/devsecops/) — CI/CD pipelines with security gates, image scanning, and secured deployment
+- [Red Hat Architecture and Design Patterns](https://developers.redhat.com/topics/red-hat-architecture-and-design-patterns) — portfolio architectures and solution patterns hub

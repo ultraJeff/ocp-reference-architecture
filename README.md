@@ -1,30 +1,38 @@
-# OpenShift Reference Architecture
+# Application Modernization & Cloud-Native Standards for OpenShift
 
-A baseline application reference architecture for deploying well-architected applications on Red Hat OpenShift Container Platform.
+Best practices and prescriptive standards for application modernization and cloud-native development on Red Hat OpenShift Container Platform.
 
-## What This Is
+## Purpose
 
-This repo provides a foundational, opinionated architecture for how a typical application should land on OpenShift — covering the components most applications need before any app-specific customization:
+This document answers: **"What does a well-architected application look like on OpenShift?"**
 
-- **Presentation Tier** — Deployment, Service, Route, HPA
-- **API / Business Logic Tier** — Deployment, Service, Route, HPA
-- **Data Tier** — Operator-managed database or StatefulSet with persistent storage
-- **Observability** — Structured logging, Prometheus metrics (ServiceMonitor), distributed tracing
-- **Security** — Restricted SCCs, NetworkPolicies (default-deny), ExternalSecrets
-- **CI/CD** — Tekton or GitHub Actions + ArgoCD GitOps deployment
-- **Environment Promotion** — Kustomize overlays for dev / stage / prod
+It defines the non-negotiable requirements, recommended practices, and architectural patterns that every application team should follow — whether modernizing an existing app or building something new. It is organized around standards and policies, not just YAML examples.
+
+## What's Covered
+
+| Section | What It Answers |
+|---------|-----------------|
+| **Application Readiness Requirements** | What MUST my app do before it can run on OpenShift? |
+| **Platform-Provided Capabilities** | What does the platform give me — and what must I NOT reimplement? |
+| **Architecture Standards by Tier** | What are the prescriptive patterns for UI, API, and Data tiers? |
+| **Security Standards** | What are the non-negotiable security policies? |
+| **CI/CD & GitOps Standards** | How MUST applications be built and deployed? |
+| **Modernization Maturity Model** | Where is my app today, and what's the path to cloud-native? |
+| **Extension Catalog** | What additional components are available when justified? |
+| **Governance & Compliance Checklist** | How do I verify my app meets these standards? |
 
 ## Contents
 
 | File | Description |
 |------|-------------|
-| [baseline-app-architecture.md](baseline-app-architecture.md) | Full reference architecture with diagrams, YAML examples, and extension points |
+| [baseline-app-architecture.md](baseline-app-architecture.md) | Full standards document with requirements, architecture patterns, maturity model, and compliance checklist |
 
 ## How to Use
 
-1. Start with the [baseline architecture](baseline-app-architecture.md) as your foundation
-2. Identify which [extension points](baseline-app-architecture.md#9-extension-points) apply to your application (Kafka, Service Mesh, KEDA, etc.)
-3. Layer those components on top of the baseline
+1. **Onboarding a new app?** Start with the [Governance & Compliance Checklist](baseline-app-architecture.md#9-governance--compliance-checklist) to understand the bar
+2. **Modernizing an existing app?** Use the [Maturity Model](baseline-app-architecture.md#6-modernization-maturity-model) to assess current state and plan next steps
+3. **Building cloud-native?** Follow the [Architecture Standards](baseline-app-architecture.md#3-architecture-standards-by-tier) and the [Platform-Provided Capabilities](baseline-app-architecture.md#2-platform-provided-capabilities) to avoid reinventing the wheel
+4. **Need more than the baseline?** Check the [Extension Catalog](baseline-app-architecture.md#7-extension-catalog) for approved add-ons
 
 ## Related Red Hat Resources
 

@@ -98,12 +98,17 @@ The platform provides these capabilities out of the box. Application teams **MUS
 
 | Standard | Requirement Level |
 |----------|-------------------|
-| Serve static assets via a lightweight HTTP server (nginx, Caddy) or SSR runtime (Node.js) | MUST |
+| Serve static assets via a lightweight HTTP server (nginx, Caddy) or SSR runtime (Node.js, Kestrel) | MUST |
 | Externalize API base URLs via environment variables injected at build or runtime | MUST |
 | Set minimum 2 replicas in production | MUST |
 | Configure HPA with CPU target ≤ 70% | SHOULD |
 | Use a Route with TLS edge termination | MUST |
 | Return a meaningful `/ready` and `/healthz` | MUST |
+
+**.NET-specific guidance:**
+- Use ASP.NET Core with Kestrel as the web server — do not use IIS or HTTP.sys in-container
+- For Blazor Server or MVC apps, ensure session state is externalized (Redis, SQL) rather than held in-process
+- For Blazor WebAssembly or Angular/React SPAs served from a .NET backend, consider splitting the static assets into a separate lightweight container
 
 ### 3.2 API / Business Logic Tier
 
@@ -119,16 +124,49 @@ The platform provides these capabilities out of the box. Application teams **MUS
 | Implement request timeouts and retry budgets | SHOULD |
 | Use an internal Service (ClusterIP) for intra-cluster traffic; Route only for external-facing APIs | MUST |
 
+**.NET-specific guidance:**
+- Target .NET 8+ (LTS) for all new development and modernization efforts. .NET Framework 4.x applications MUST be migrated to .NET 8+ to run on Linux containers
+- Use the `Microsoft.Extensions.Configuration` abstraction to bind environment variables and ConfigMaps to strongly-typed options classes
+- Use `IHttpClientFactory` with Polly for resilient HTTP calls (retry, circuit breaker, timeout) — do not instantiate `HttpClient` directly
+- Use ASP.NET Core's built-in health check framework (`Microsoft.Extensions.Diagnostics.HealthChecks`) for `/healthz` and `/ready` endpoints
+- Expose Prometheus metrics via `prometheus-net.AspNetCore` or OpenTelemetry .NET SDK
+- Connection strings for external databases (e.g., MSSQL) MUST be injected via environment variables or mounted Secrets — never in `appsettings.json` baked into the image
+
 ### 3.3 Data Tier
+
+Databases frequently live outside the OpenShift cluster — on VMs, managed cloud services, or existing enterprise infrastructure. This is normal and expected. The standards below apply regardless of where the database runs.
+
+#### External Database (Common Pattern)
+
+Most modernization efforts keep the existing database in place and modernize the application tier. The application connects to the database over the network.
 
 | Standard | Requirement Level |
 |----------|-------------------|
-| Use an Operator-managed database (Crunchy PGO, MongoDB Enterprise Operator, Redis Enterprise Operator) | MUST for production |
-| Self-managed StatefulSets are acceptable in dev/stage only | MAY |
+| Database connection strings and credentials MUST be injected via Secrets (never hardcoded, never baked into images) | MUST |
+| Production credentials MUST be sourced from an external secrets manager via External Secrets Operator | MUST |
+| NetworkPolicy egress rules MUST explicitly allow traffic from the API tier to the database host/port | MUST |
+| Connection pooling MUST be configured appropriately for containerized workloads (containers restart more frequently than VMs — set reasonable pool sizes and connection lifetimes) | MUST |
+| Application MUST handle transient database connectivity failures gracefully (retry with backoff, not crash) | MUST |
+| Schema migrations SHOULD be run as Kubernetes Jobs or via a controlled CI/CD step, not as part of application startup | SHOULD |
+| Database backup and restore procedures MUST be documented and tested, even if managed by a separate team | MUST |
+
+**.NET + MSSQL-specific guidance:**
+- Use `Microsoft.Data.SqlClient` (not the legacy `System.Data.SqlClient`) for SQL Server connectivity
+- Configure `SqlConnection` pool size via connection string parameters (`Max Pool Size`, `Min Pool Size`) — defaults designed for long-lived VM processes may cause pool exhaustion in containers
+- Set `Connection Lifetime` or `Load Balance Timeout` to recycle connections periodically, accommodating pod restarts and rolling deployments
+- Use Entity Framework Core migrations via a dedicated Job or pipeline step — do not run `Database.Migrate()` in `Program.cs` for production
+- For Always On Availability Groups or failover clusters, use `MultiSubnetFailover=True` in the connection string
+
+#### In-Cluster Database (When Justified)
+
+For dev/test environments, or when the architecture requires a database co-located with the application, in-cluster databases are acceptable.
+
+| Standard | Requirement Level |
+|----------|-------------------|
+| Use an Operator-managed database (Crunchy PGO, MongoDB Enterprise, Redis Enterprise) when running databases on-cluster in production | SHOULD |
+| Self-managed StatefulSets are acceptable in dev/stage | MAY |
 | Configure automated backups with a tested restore procedure | MUST |
 | Use a dedicated StorageClass with appropriate IOPS and reclaim policy (`Retain` for prod) | MUST |
-| Database credentials sourced from External Secrets Operator | MUST |
-| Run schema migrations as Kubernetes Jobs, not as part of application startup | SHOULD |
 | Use headless Services for StatefulSet DNS | MUST |
 
 ---
@@ -156,8 +194,8 @@ Every application namespace MUST deploy NetworkPolicies:
 2. **Explicit allow rules** — whitelist traffic between tiers:
    - Router → UI (from `network.openshift.io/policy-group: ingress` namespace)
    - UI → API (pod-to-pod within namespace)
-   - API → Database (pod-to-pod within namespace)
-   - API → external services (egress rules as needed)
+   - API → external database (egress to specific host IP and port, e.g., MSSQL on port 1433)
+   - API → other external services (egress rules scoped to specific hosts/CIDRs as needed)
 3. **No open namespaces** — a namespace without NetworkPolicies will not pass security review
 
 ### 4.3 Image Provenance (MUST)
@@ -165,7 +203,7 @@ Every application namespace MUST deploy NetworkPolicies:
 - Images MUST be pulled from an approved registry (Quay, OpenShift internal registry, Red Hat registry)
 - Images MUST be built in a CI pipeline — no `docker build` on developer laptops pushed to prod
 - Images MUST pass ACS vulnerability scanning before deployment
-- Base images MUST use Red Hat UBI (Universal Base Image) or an approved alternative
+- Base images MUST use Red Hat UBI (Universal Base Image) or an approved alternative. For .NET workloads, use `registry.access.redhat.com/ubi8/dotnet-80-runtime` (runtime) or `ubi8/dotnet-80` (SDK) images
 - Image tags MUST use immutable references (SHA digests) in production GitOps manifests, not `:latest`
 
 ### 4.4 RBAC (MUST)
@@ -249,54 +287,65 @@ Not every application starts cloud-native. Use this maturity model to assess whe
 
 ### Level 1: Containerized (Minimum Viable)
 
-The application runs in a container on OpenShift but has not been redesigned.
+The application runs in a Linux container on OpenShift but has not been redesigned. For .NET shops, this is typically the first milestone after migrating from .NET Framework on Windows to .NET 8+ on Linux.
 
 | Characteristic | Status |
 |----------------|--------|
-| Runs in a container | Yes |
+| Runs in a Linux container | Yes |
+| Runtime | .NET 8+ on UBI base image (migration from .NET Framework complete) |
 | Non-root execution | Yes (required by platform) |
 | Health probes | Basic (TCP or HTTP) |
-| Logging | May still write to files — needs stdout migration |
-| Config | May still use embedded config files |
-| State | May be stateful (session affinity, local files) |
+| Logging | May still use `ILogger` writing to files or Windows Event Log patterns — needs stdout migration |
+| Config | May still rely on `appsettings.json` or `web.config` patterns baked into the image |
+| Database | Connects to existing external database (e.g., MSSQL on VM) — no changes to data tier |
+| State | May be stateful (in-memory session, local file storage) |
 | Scaling | Single replica, manual |
 | Deployment | May be manual or semi-automated |
 
-**What to focus on next:** Externalize configuration, migrate logging to stdout, implement proper health endpoints.
+**What to focus on next:**
+- Migrate `appsettings.json` values to environment variables / ConfigMaps (keep `appsettings.json` for structure, override via env vars)
+- Configure `ILogger` + Serilog/NLog to write structured JSON to stdout
+- Implement ASP.NET Core health checks (`/healthz`, `/ready`)
+- Externalize session state to Redis or SQL if using in-memory sessions
+- Replace `System.Data.SqlClient` with `Microsoft.Data.SqlClient`
+- Tune connection pooling for container lifecycle (shorter connection lifetimes)
 
 ### Level 2: Cloud-Ready
 
-The application meets all MUST requirements in this document and can be deployed reliably via GitOps.
+The application meets all MUST requirements in this document and can be deployed reliably via GitOps. The data tier remains where it is — what changes is how the application connects to it, monitors itself, and gets deployed.
 
 | Characteristic | Status |
 |----------------|--------|
-| Runs in a container | Yes |
+| Runtime | .NET 8+ on UBI, Kestrel web server |
 | Non-root, restricted SCC | Yes |
-| Health probes | Readiness + liveness, meaningful checks |
-| Logging | Structured JSON to stdout |
-| Config | Externalized via ConfigMap/Secret |
-| State | Stateless application tier, external data stores |
+| Health probes | ASP.NET Core health check framework with readiness + liveness, meaningful checks |
+| Logging | Structured JSON to stdout via Serilog or OpenTelemetry logging |
+| Config | Externalized via environment variables, ConfigMaps, and Secrets |
+| Database | External database with connection strings injected via Secrets, connection pooling tuned |
+| State | Stateless application tier — sessions externalized, no local file dependencies |
 | Scaling | HPA-enabled, minimum 2 replicas |
-| Deployment | Fully automated via GitOps |
-| Metrics | `/metrics` exposed, ServiceMonitor deployed |
-| Security | NetworkPolicies, ExternalSecrets, image scanning |
+| Deployment | Fully automated via GitOps (ArgoCD) |
+| Metrics | `/metrics` exposed via `prometheus-net` or OpenTelemetry, ServiceMonitor deployed |
+| Resilience | `IHttpClientFactory` + Polly policies for downstream calls |
+| Security | NetworkPolicies, ExternalSecrets, image scanning, UBI base images |
 
-**What to focus on next:** Decompose monolithic components, add distributed tracing, implement circuit breakers.
+**What to focus on next:** Decompose monolithic components into bounded services, add distributed tracing via OpenTelemetry .NET SDK, implement more granular scaling.
 
 ### Level 3: Cloud-Native
 
-The application is fully decomposed, independently deployable, and takes full advantage of the platform.
+The application is decomposed into independently deployable services and takes full advantage of the platform. The data tier may still be external — cloud-native does not require an in-cluster database.
 
 | Characteristic | Status |
 |----------------|--------|
 | All Level 2 requirements | Yes |
-| Architecture | Microservices or well-bounded modular services |
-| Communication | Async where appropriate (Kafka, AMQP), sync via well-defined APIs |
+| Architecture | Microservices or well-bounded modular services, each with its own repo, pipeline, and deployment |
+| Communication | Async where appropriate (Kafka, AMQP via MassTransit or NServiceBus), sync via well-defined APIs |
+| Database | Per-service data ownership; shared databases avoided or isolated via schema-per-service |
 | Scaling | Custom metric scaling (KEDA), scale-to-zero where applicable |
-| Resilience | Circuit breakers, retry budgets, bulkheads, graceful degradation |
-| Tracing | Full distributed tracing via OpenTelemetry |
+| Resilience | Circuit breakers, retry budgets, bulkheads, graceful degradation (Polly v8 resilience pipelines) |
+| Tracing | Full distributed tracing via OpenTelemetry .NET SDK |
 | Deployment | Canary or blue-green release strategies |
-| API management | Versioned APIs, OpenAPI specs, deprecation lifecycle |
+| API management | Versioned APIs, OpenAPI specs via Swashbuckle/NSwag, deprecation lifecycle |
 | Multi-environment | Consistent deployment across clusters via ApplicationSets |
 
 ---
@@ -325,54 +374,61 @@ These components are available when application requirements justify them. They 
 Every well-architected application on this platform follows this foundational pattern. Extensions from the catalog above are layered on top.
 
 ```
-                        ┌────────────────────────────────────────────────────────┐
-                        │                  OpenShift Cluster                      │
-                        │                                                        │
-                        │  ┌──────────────────────────────────────────────────┐  │
-   End Users ──────►    │  │          Ingress (Router / HAProxy)              │  │
-                        │  │      TLS termination · Route-based routing       │  │
-                        │  └──────────┬───────────────────────┬───────────────┘  │
-                        │             │                       │                  │
-                        │             ▼                       ▼                  │
-                        │  ┌──────────────────┐    ┌──────────────────┐         │
-                        │  │ Presentation Tier │    │   API Tier        │         │
-                        │  │                   │    │                   │         │
-                        │  │ Deployment (≥2)   │    │ Deployment (≥2)   │         │
-                        │  │ Service + Route   │    │ Service + Route   │         │
-                        │  │ HPA (CPU ≤70%)    │    │ HPA (CPU ≤70%)    │         │
-                        │  │ /healthz + /ready │    │ /healthz + /ready │         │
-                        │  │ /metrics          │    │ /metrics          │         │
-                        │  └──────────────────┘    └────┬──────┬───────┘         │
-                        │                               │      │                 │
-                        │                   ┌───────────┘      └──────────┐      │
-                        │                   ▼                             ▼      │
-                        │  ┌──────────────────────┐    ┌────────────────────┐    │
-                        │  │   Data Tier            │    │  External Services │    │
-                        │  │                        │    │  (via NetworkPolicy │    │
-                        │  │  Operator-managed DB   │    │   egress rules)    │    │
-                        │  │  Automated backups     │    └────────────────────┘    │
-                        │  │  PVC (Retain policy)   │                              │
-                        │  └──────────────────────┘                              │
-                        │                                                        │
-                        │  ┌──────────────────────────────────────────────────┐  │
-                        │  │               Platform Services                   │  │
-                        │  │                                                   │  │
-                        │  │  Logging (stdout → ClusterLogForwarder → Loki)    │  │
-                        │  │  Monitoring (ServiceMonitor → Prometheus)          │  │
-                        │  │  Alerting (PrometheusRule → AlertManager)          │  │
-                        │  │  Secrets (ExternalSecret → Vault)                 │  │
-                        │  │  Deployment (ArgoCD → GitOps repo)                │  │
-                        │  │  Scanning (ACS → Quay)                            │  │
-                        │  │  Network (default-deny + explicit allow)           │  │
-                        │  └──────────────────────────────────────────────────┘  │
-                        └────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                         OpenShift Cluster                                │
+  │                                                                          │
+  │  ┌────────────────────────────────────────────────────────────────────┐  │
+  │  │                Ingress (Router / HAProxy)                          │  │
+  │  │            TLS termination · Route-based routing                   │  │
+  │  └──────────┬─────────────────────────────┬───────────────────────────┘  │
+  │             │                             │                              │
+  │             ▼                             ▼                              │
+  │  ┌──────────────────────┐    ┌──────────────────────────┐               │
+  │  │  Presentation Tier   │    │  API / Business Logic     │               │
+  │  │                      │    │                           │               │
+  │  │  .NET 8+ / Kestrel   │    │  .NET 8+ / ASP.NET Core  │               │
+  │  │  Deployment (≥2)     │    │  Deployment (≥2)          │               │
+  │  │  Service + Route     │    │  Service + Route          │               │
+  │  │  HPA (CPU ≤70%)      │    │  HPA (CPU ≤70%)           │               │
+  │  │  /healthz + /ready   │    │  /healthz + /ready        │               │
+  │  │  /metrics            │    │  /metrics                 │               │
+  │  └──────────────────────┘    └──────────┬────────────────┘               │
+  │                                         │                                │
+  │  ┌────────────────────────────────────────────────────────────────────┐  │
+  │  │                    Platform Services                               │  │
+  │  │                                                                    │  │
+  │  │  Logging (stdout → ClusterLogForwarder → Loki/Splunk)              │  │
+  │  │  Monitoring (ServiceMonitor → Prometheus)                          │  │
+  │  │  Alerting (PrometheusRule → AlertManager)                          │  │
+  │  │  Secrets (ExternalSecret → Vault/Key Vault)                        │  │
+  │  │  Deployment (ArgoCD → GitOps repo)                                 │  │
+  │  │  Scanning (ACS → Quay)                                             │  │
+  │  │  Network (default-deny + explicit allow)                            │  │
+  │  └────────────────────────────────────────────────────────────────────┘  │
+  └──────────────────────────────┬───────────────────────────────────────────┘
+                                 │
+                                 │  NetworkPolicy egress
+                                 │  (explicit allow to DB host:port)
+                                 │
+                                 ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                     External Data Tier                                   │
+  │                                                                          │
+  │  ┌──────────────────────┐    ┌──────────────────────┐                   │
+  │  │  MSSQL Server (VM)   │    │  Other External       │                   │
+  │  │                      │    │  Services              │                   │
+  │  │  Existing infra      │    │  (APIs, LDAP, SMTP,    │                   │
+  │  │  Managed by DBA team │    │   cloud services)      │                   │
+  │  │  Backup/DR in place  │    │                        │                   │
+  │  └──────────────────────┘    └──────────────────────┘                   │
+  └──────────────────────────────────────────────────────────────────────────┘
 
-                        ┌────────────────────────────────────────────────────────┐
-                        │                   CI/CD Pipeline                        │
-                        │                                                        │
-                        │  Git push → Lint → Test → Build → Scan → Push image   │
-                        │  → Update GitOps repo → ArgoCD sync → Smoke test      │
-                        └────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │                         CI/CD Pipeline                                   │
+  │                                                                          │
+  │  Git push → Lint → Test → Build (.NET) → Scan → Push image             │
+  │  → Update GitOps repo → ArgoCD sync → Smoke test                       │
+  └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -400,7 +456,8 @@ Use this checklist during application onboarding and periodic reviews.
 - [ ] Minimum 2 replicas in production with HPA configured
 - [ ] Resource requests and limits set on all containers
 - [ ] Graceful shutdown handler implemented (handles SIGTERM)
-- [ ] Backup and restore procedure documented and tested (data tier)
+- [ ] Database connectivity tested under pod restart/reschedule conditions (connection pooling, transient fault handling)
+- [ ] Backup and restore procedure documented and tested (data tier — whether in-cluster or external)
 
 ### Post-Deployment Verification (SHOULD)
 

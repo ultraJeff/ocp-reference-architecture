@@ -257,6 +257,19 @@ Every application namespace deploys NetworkPolicies:
 - Do not use `cluster-admin` or `admin` ClusterRoles for application workloads
 - Namespace-scoped Roles are preferred over ClusterRoles
 
+### 4.5 Application-Level Security
+
+The standards above cover how the platform protects workloads. These standards cover what happens **inside your code** — the security practices every developer owns:
+
+| Practice | What to Do | What NOT to Do |
+|----------|-----------|----------------|
+| **Input validation** | Validate and sanitize all input at system boundaries (API endpoints, message consumers, file uploads). Use allow-lists, not deny-lists | Trust input from other internal services without validation. Internal ≠ trusted — a compromised upstream poisons everything downstream |
+| **Avoid shelling out** | Use libraries and SDKs for file operations, HTTP calls, and system interactions | Call `Process.Start()`, `Runtime.exec()`, or backtick commands with user-supplied input. This is command injection waiting to happen |
+| **Dependency hygiene** | Pin dependency versions. Run `dotnet list package --vulnerable` (or equivalent) in CI. Update regularly | Use wildcard version ranges in production. Ignore vulnerability scan results from ACS/Quay |
+| **Don't log secrets** | Scrub sensitive fields (tokens, passwords, SSNs, PII) before logging. Use structured logging with explicit field selection | Log full request/response bodies in production. Use `ToString()` on objects that may contain credentials |
+| **Read-only root filesystem** | Set `readOnlyRootFilesystem: true` in your security context. Write temp data to `EmptyDir` volumes mounted at `/tmp` | Assume your container needs a writable filesystem. Most apps don't — and a read-only root blocks many exploit techniques |
+| **Minimize base image** | Use runtime-only images (`ubi8/dotnet-80-runtime`, not the SDK image). Use multi-stage builds to keep build tools out of production | Ship the SDK, build tools, or debugging utilities in your production image. Smaller image = smaller attack surface |
+
 ---
 
 ## 5. CI/CD & GitOps Standards
@@ -361,6 +374,161 @@ Modernizing isn't just about putting your app in a container. These are the spec
 | Self-signed certs managed by the app | Operational burden; breaks automation | Platform TLS via Routes (edge or reencrypt termination) |
 | Custom authentication / credential management | Security risk; duplicates platform capability | Integrate with platform OIDC/OAuth provider |
 | Storing secrets in config files or environment variables in source control | Secrets leaked in Git history | External Secrets Operator → Vault/Key Vault; SealedSecrets for GitOps |
+
+### Before & After: Common Rewrites
+
+These code examples show the most impactful changes. Each is a real pattern teams encounter during modernization.
+
+#### Session State
+
+**Before** — in-memory session (breaks with multiple replicas):
+```csharp
+// Startup.cs — legacy pattern
+builder.Services.AddSession(); // In-memory, lost on pod restart
+```
+
+**After** — externalized to Redis:
+```csharp
+// Program.cs — cloud-native
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration["Redis:ConnectionString"];
+});
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(20);
+    options.Cookie.IsEssential = true;
+});
+```
+
+#### Configuration
+
+**Before** — hardcoded in `appsettings.json`, baked into image:
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=proddb01;Database=MyApp;User Id=sa;Password=hunter2;"
+  }
+}
+```
+
+**After** — injected via environment variables, secrets managed externally:
+```csharp
+// Program.cs
+builder.Configuration.AddEnvironmentVariables();
+
+// appsettings.json keeps structure only (no secrets, no env-specific values)
+// Actual values come from:
+//   - ConfigMap mounted as env vars (non-sensitive)
+//   - Secret mounted as env vars (sensitive, sourced from ExternalSecret)
+```
+
+#### Logging
+
+**Before** — writing to files or Windows Event Log:
+```csharp
+// Legacy pattern — logs to a file, not collected by platform
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.File("C:\\Logs\\myapp.log")
+    .CreateLogger();
+```
+
+**After** — structured JSON to stdout, collected automatically by the platform:
+```csharp
+// Program.cs
+builder.Host.UseSerilog((context, config) => config
+    .WriteTo.Console(new RenderedCompactJsonFormatter())
+    .Enrich.WithProperty("ApplicationName", "my-api")
+    .Enrich.WithCorrelationId());
+```
+
+#### Health Checks
+
+**Before** — no health endpoints, or a simple "200 OK" that checks nothing:
+```csharp
+app.MapGet("/health", () => "OK"); // Tells you nothing useful
+```
+
+**After** — meaningful checks using ASP.NET Core health check framework:
+```csharp
+// Program.cs
+builder.Services.AddHealthChecks()
+    .AddSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection")!,
+        name: "sqlserver",
+        tags: new[] { "ready" })
+    .AddRedis(
+        builder.Configuration["Redis:ConnectionString"]!,
+        name: "redis",
+        tags: new[] { "ready" });
+
+// Liveness — is the process alive? Don't check dependencies here.
+app.MapHealthChecks("/healthz", new HealthCheckOptions
+{
+    Predicate = _ => false // No dependency checks — just "am I running?"
+});
+
+// Readiness — can I serve traffic? Check dependencies here.
+app.MapHealthChecks("/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+```
+
+#### Resilient HTTP Calls
+
+**Before** — manually creating `HttpClient`, no retry logic:
+```csharp
+// Legacy — socket exhaustion, no resilience
+var client = new HttpClient();
+var response = await client.GetAsync("http://other-service/api/data");
+```
+
+**After** — `IHttpClientFactory` with Polly retry and circuit breaker:
+```csharp
+// Program.cs
+builder.Services.AddHttpClient("OrderService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:OrderService:BaseUrl"]!);
+    client.Timeout = TimeSpan.FromSeconds(10);
+})
+.AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(
+    retryCount: 3,
+    sleepDurationProvider: attempt => TimeSpan.FromMilliseconds(200 * Math.Pow(2, attempt))))
+.AddTransientHttpErrorPolicy(p => p.CircuitBreakerAsync(
+    handledEventsAllowedBeforeBreaking: 5,
+    durationOfBreak: TimeSpan.FromSeconds(30)));
+
+// In your service class — injected, pooled, resilient
+public class OrderClient(IHttpClientFactory factory)
+{
+    public async Task<Order?> GetOrderAsync(int id)
+    {
+        var client = factory.CreateClient("OrderService");
+        return await client.GetFromJsonAsync<Order>($"/api/orders/{id}");
+    }
+}
+```
+
+#### Service Discovery
+
+**Before** — hardcoded IPs or hostnames:
+```csharp
+var client = new HttpClient { BaseAddress = new Uri("http://10.0.1.47:8080") };
+```
+
+**After** — Kubernetes DNS, injected via config:
+```csharp
+// appsettings.json (overridden per environment via ConfigMap)
+// In dev overlay: "http://order-service.myapp-dev.svc.cluster.local:8080"
+// In prod overlay: "http://order-service.myapp-prod.svc.cluster.local:8080"
+
+builder.Services.AddHttpClient("OrderService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:OrderService:BaseUrl"]!);
+});
+```
 
 ---
 
@@ -600,3 +768,141 @@ Use this checklist during application onboarding and periodic reviews.
 - [ ] Alerts fire correctly under simulated failure conditions
 - [ ] Runbook exists for common failure scenarios
 - [ ] On-call team trained on application architecture and failure modes
+
+### What Is a Runbook?
+
+A runbook is a step-by-step guide that tells an on-call engineer what to do when something goes wrong with your application — **at 2 AM, without context, having never seen your code**. It's the difference between "figure it out" and "follow these steps." Every production application needs one.
+
+A good runbook is:
+- **Specific to your app**, not generic Kubernetes troubleshooting
+- **Action-oriented** — tells you what to run, not what to think about
+- **Kept next to the code** — in the app's GitOps repo or wiki, not a shared drive no one can find
+
+#### Runbook Template
+
+Use this as a starting point. Fill in the sections relevant to your application.
+
+```markdown
+# [App Name] — Operations Runbook
+
+## Application Overview
+- **What it does:** [1-2 sentence description]
+- **Team / owner:** [team name, Slack channel, PagerDuty service]
+- **Architecture:** [UI + API + external MSSQL, or whatever applies]
+- **Namespace(s):** [myapp-dev, myapp-stage, myapp-prod]
+- **GitOps repo:** [link]
+- **Dashboards:** [link to Grafana/Prometheus dashboard]
+
+## Key Endpoints
+| Endpoint | Purpose |
+|----------|---------|
+| `/healthz` | Liveness — is the process alive? |
+| `/ready` | Readiness — can it serve traffic? |
+| `/metrics` | Prometheus metrics |
+| [app-specific] | [e.g., `/api/v1/status` for business health] |
+
+## Common Failure Scenarios
+
+### Pods are crash-looping
+1. Check pod logs: `oc logs -f deployment/myapp-api -n myapp-prod`
+2. Check events: `oc get events -n myapp-prod --sort-by=.lastTimestamp`
+3. Common causes:
+   - Database unreachable → check connectivity to [DB host:port]
+   - Config missing → verify ConfigMap/Secret exists and is mounted
+   - OOM killed → check `oc describe pod` for OOMKilled reason, increase memory limit
+
+### High error rate (5xx responses)
+1. Check dashboard: [link]
+2. Check logs for exceptions: `oc logs deployment/myapp-api -n myapp-prod | grep -i error`
+3. Check downstream dependencies:
+   - Database: [how to verify]
+   - External API: [how to verify]
+4. If isolated to this app: restart deployment `oc rollout restart deployment/myapp-api -n myapp-prod`
+
+### High latency
+1. Check dashboard: [link]
+2. Check database query performance: [how to verify]
+3. Check HPA status: `oc get hpa -n myapp-prod` — are we at max replicas?
+4. Check resource usage: `oc adm top pods -n myapp-prod`
+
+### Cannot connect to database
+1. Verify database is reachable from cluster: `oc debug deployment/myapp-api -- curl -v telnet://[db-host]:[db-port]`
+2. Check Secret has correct credentials: `oc get secret myapp-db-credentials -n myapp-prod -o jsonpath='{.data}'`
+3. Check NetworkPolicy allows egress to database host
+4. Contact DBA team: [contact info]
+
+## Rollback Procedure
+1. Identify last known good commit in GitOps repo
+2. Revert in GitOps repo or use ArgoCD to sync to previous commit
+3. Verify rollback: check `/ready` endpoint returns 200
+
+## Escalation Path
+1. **L1 (on-call):** [team/person], [Slack channel]
+2. **L2 (app owner):** [team/person]
+3. **L3 (platform team):** [Slack channel / PagerDuty]
+4. **Database issues:** [DBA team contact]
+```
+
+---
+
+## 12. Developer Inner Loop
+
+The standards in this document describe what production looks like. This section covers how to develop against those standards locally — so issues are caught on your laptop, not in the CI pipeline.
+
+### Local Development Tooling
+
+| Tool | What It Does | When to Use |
+|------|-------------|-------------|
+| **Podman Desktop** | Build and run containers locally without Docker daemon | Building and testing your container image before pushing |
+| **odo** (OpenShift Do) | Inner-loop dev tool that syncs code changes to a running container on the cluster | Iterating quickly against a real OpenShift environment without full CI/CD cycles |
+| **Podman Compose** | Run multi-container apps locally (API + database + Redis) | Testing your app with its dependencies before deploying to the cluster |
+| **Dev Containers** (VS Code / JetBrains) | Develop inside a container that matches your production environment | Ensuring your local dev environment matches prod (same OS, same runtime) |
+
+### Local Checklist
+
+Before you push, verify these locally — they're the same things the platform will check:
+
+```bash
+# 1. Does it build as a container?
+podman build -t myapp:dev .
+
+# 2. Does it run as non-root?
+podman run --user 1001:0 myapp:dev
+
+# 3. Does it start without hardcoded config?
+podman run -e ConnectionStrings__Default="Server=localhost;..." myapp:dev
+
+# 4. Do health endpoints work?
+curl http://localhost:8080/healthz   # Should return 200
+curl http://localhost:8080/ready     # Should return 200 (or 503 if no DB)
+
+# 5. Are logs going to stdout (not files)?
+podman logs <container-id>          # Should see structured JSON output
+
+# 6. Does /metrics respond?
+curl http://localhost:8080/metrics   # Should return Prometheus format
+```
+
+### Multi-Stage Dockerfile Template
+
+This pattern keeps your production image small and secure:
+
+```dockerfile
+# Build stage — SDK image, not shipped to prod
+FROM registry.access.redhat.com/ubi8/dotnet-80 AS build
+WORKDIR /src
+COPY *.csproj .
+RUN dotnet restore
+COPY . .
+RUN dotnet publish -c Release -o /app
+
+# Runtime stage — minimal image, what actually runs in prod
+FROM registry.access.redhat.com/ubi8/dotnet-80-runtime AS runtime
+WORKDIR /app
+COPY --from=build /app .
+
+# Run as non-root
+USER 1001
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "MyApp.dll"]
+```

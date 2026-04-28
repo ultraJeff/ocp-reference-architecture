@@ -13,12 +13,14 @@ It defines the non-negotiable requirements, recommended practices, and architect
 | Section | What It Answers |
 |---------|-----------------|
 | **Application Readiness Requirements** | What MUST my app do before it can run on OpenShift? |
-| **Platform-Provided Capabilities** | What does the platform give me — and what must I NOT reimplement? |
-| **Architecture Standards by Tier** | What are the prescriptive patterns for UI, API, and Data tiers? |
+| **Platform-Provided Capabilities & Citizenship** | What does the platform give me, what must I NOT reimplement, and what's my responsibility as a tenant? |
+| **Architecture Standards by Tier** | What are the prescriptive patterns for UI, API, Data, and Storage tiers? |
 | **Security Standards** | What are the non-negotiable security policies? |
 | **CI/CD & GitOps Standards** | How MUST applications be built and deployed? |
+| **Legacy Code Patterns → Cloud-Native Rewrites** | I write my legacy code this way — how do I rewrite it? |
 | **Modernization Maturity Model** | Where is my app today, and what's the path to cloud-native? |
 | **Extension Catalog** | What additional components are available when justified? |
+| **Application Onboarding Decision Tree** | Is my app ready for the platform, and who needs to do what? |
 | **Governance & Compliance Checklist** | How do I verify my app meets these standards? |
 
 ## Contents

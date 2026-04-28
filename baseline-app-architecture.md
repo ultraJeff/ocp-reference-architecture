@@ -1,26 +1,30 @@
 # Application Modernization Standards & Cloud-Native Best Practices for OpenShift
 
-> This document defines the standards, policies, and architectural patterns for deploying well-architected applications on Red Hat OpenShift Container Platform. It is prescriptive by design: **MUST** requirements are non-negotiable for production workloads, **SHOULD** items are strongly recommended, and **MAY** items are available when justified by application needs.
+> This document defines the standards, policies, and architectural patterns for deploying well-architected custom applications on Red Hat OpenShift Container Platform. It focuses on what happens **inside the application** — the code patterns, design decisions, and operational behaviors that make an app a good citizen on a shared platform — not just the infrastructure around it.
+>
+> **Audience:** Application developers, security engineers, and operations/SRE teams. Successful modernization is a cross-functional effort — developers write the code, security validates the posture, and operations ensures the app is observable and sustainable in production.
+>
+> It is prescriptive by design: **Required** items are non-negotiable for production workloads, **SHOULD** items are strongly recommended, and **MAY** items are available when justified by application needs.
 
 ---
 
 ## 1. Application Readiness Requirements
 
-Before an application is deployed to OpenShift, it **MUST** meet these baseline requirements. These are not suggestions — they are prerequisites for platform onboarding.
+Before an application is deployed to OpenShift, it meets these baseline requirements. These are not suggestions — they are prerequisites for platform onboarding.
 
-### 1.1 Container-Native Design (MUST)
+### 1.1 Container-Native Design
 
 | Requirement | Standard | Why |
 |-------------|----------|-----|
 | Single process per container | Each container runs one process | Enables independent scaling, restart isolation, and clear resource attribution |
-| Non-root execution | Containers MUST run as non-root (UID ≥ 1000) | OpenShift enforces `restricted-v2` SCC by default; root containers will be rejected |
+| Non-root execution | Containers run as non-root (UID ≥ 1000) | OpenShift enforces `restricted-v2` SCC by default; root containers will be rejected |
 | No host dependencies | No hostPath volumes, host networking, or privileged access | Ensures workload portability and cluster security |
 | Immutable images | Application code is baked into the image at build time, not mounted or downloaded at runtime | Guarantees reproducibility and auditability across environments |
 | No hardcoded configuration | All environment-specific values (URLs, credentials, feature flags) are injected via ConfigMaps, Secrets, or environment variables | Enables promotion across dev → stage → prod without image rebuilds |
 
-### 1.2 Health & Lifecycle (MUST)
+### 1.2 Health & Lifecycle
 
-Every application component **MUST** implement the following endpoints:
+Every application component implements the following endpoints:
 
 | Endpoint | Purpose | Implementation |
 |----------|---------|----------------|
@@ -29,9 +33,9 @@ Every application component **MUST** implement the following endpoints:
 | **Startup probe** (if needed) | Protects slow-starting apps from premature liveness kills | Use `failureThreshold × periodSeconds` to define a startup budget |
 | **Graceful shutdown** | Handles `SIGTERM` cleanly | Drain in-flight requests, close DB connections, flush buffers. Default grace period: 30s |
 
-### 1.3 Observability Contract (MUST)
+### 1.3 Observability Contract
 
-Applications are not production-ready until they are observable. Every component **MUST** fulfill this contract:
+Applications are not production-ready until they are observable. Every component fulfills this contract:
 
 **Logging:**
 - Write all logs to `stdout`/`stderr` — never to files inside the container
@@ -48,20 +52,20 @@ Applications are not production-ready until they are observable. Every component
 - Instrument with OpenTelemetry SDK
 - Propagate trace context headers (`traceparent`, `tracestate`) across service boundaries
 
-### 1.4 Configuration & Secrets (MUST)
+### 1.4 Configuration & Secrets
 
 | Policy | Standard |
 |--------|----------|
-| Configuration injection | All config MUST be injected via environment variables or mounted ConfigMaps. No config files baked into images |
-| Secrets management | Production secrets MUST be sourced from an external secrets manager (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault) via the External Secrets Operator. Kubernetes Secrets objects are acceptable only in dev/stage |
-| No secrets in images | Container images MUST NOT contain credentials, API keys, certificates, or connection strings |
+| Configuration injection | All config is injected via environment variables or mounted ConfigMaps. No config files baked into images |
+| Secrets management | Production secrets are sourced from an external secrets manager (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault) via the External Secrets Operator. Kubernetes Secrets objects are acceptable only in dev/stage |
+| No secrets in images | Container images do not contain credentials, API keys, certificates, or connection strings |
 | No secrets in Git | No secrets in source repositories. Use SealedSecrets or ExternalSecrets for GitOps workflows |
 
 ---
 
 ## 2. Platform-Provided Capabilities
 
-The platform provides these capabilities out of the box. Application teams **MUST NOT** reimplement them — doing so creates operational burden, security gaps, and supportability issues.
+The platform provides these capabilities out of the box. Application teams do not reimplement them — doing so creates operational burden, security gaps, and supportability issues.
 
 ### What the Platform Gives You — Use It
 
@@ -90,6 +94,20 @@ The platform provides these capabilities out of the box. Application teams **MUS
 | Async/event processing | Kafka consumers, queue workers — declared as additional Deployments |
 | Performance testing | Load test before production promotion |
 
+### Platform Citizenship Contract
+
+Deploying on a shared platform is a social contract. Every application team agrees to these responsibilities in exchange for the capabilities the platform provides:
+
+| Commitment | What This Means |
+|------------|-----------------|
+| **Own your resource footprint** | Set accurate CPU/memory requests and limits. Over-requesting starves other tenants; under-requesting causes OOM kills and noisy-neighbor effects |
+| **Be observable** | If the platform team can't see your app's health, they can't help you during incidents. Logging, metrics, and health probes are mandatory — not optional extras |
+| **Respect shared infrastructure** | Don't circumvent NetworkPolicies, don't request privileged SCCs without justification, don't run as root. These policies protect everyone on the cluster |
+| **Keep your images current** | Rebuild regularly against updated base images. Stale images accumulate CVEs that affect the platform's security posture |
+| **Automate everything** | No manual deployments, no snowflake configurations. If it can't be reproduced from Git, it doesn't belong in production |
+| **Participate in incident response** | When your app causes cluster impact, respond promptly. Maintain runbooks and ensure on-call coverage |
+| **Communicate changes** | Coordinate with the platform team for large-scale changes (migration of workloads, major scaling events, new external integrations) |
+
 ---
 
 ## 3. Architecture Standards by Tier
@@ -98,12 +116,12 @@ The platform provides these capabilities out of the box. Application teams **MUS
 
 | Standard | Requirement Level |
 |----------|-------------------|
-| Serve static assets via a lightweight HTTP server (nginx, Caddy) or SSR runtime (Node.js, Kestrel) | MUST |
-| Externalize API base URLs via environment variables injected at build or runtime | MUST |
-| Set minimum 2 replicas in production | MUST |
+| Serve static assets via a lightweight HTTP server (nginx, Caddy) or SSR runtime (Node.js, Kestrel) | Required |
+| Externalize API base URLs via environment variables injected at build or runtime | Required |
+| Set minimum 2 replicas in production  Required |
 | Configure HPA with CPU target ≤ 70% | SHOULD |
-| Use a Route with TLS edge termination | MUST |
-| Return a meaningful `/ready` and `/healthz` | MUST |
+| Use a Route with TLS edge termination  Required |
+| Return a meaningful `/ready` and `/healthz`  Required |
 
 **.NET-specific guidance:**
 - Use ASP.NET Core with Kestrel as the web server — do not use IIS or HTTP.sys in-container
@@ -114,23 +132,23 @@ The platform provides these capabilities out of the box. Application teams **MUS
 
 | Standard | Requirement Level |
 |----------|-------------------|
-| Stateless design — no local session state, no local file storage for runtime data | MUST |
-| Expose a RESTful or gRPC API with versioning (URI path or header) | MUST |
-| Connect to databases and external services via injected configuration (never hardcoded) | MUST |
-| Set minimum 2 replicas in production | MUST |
+| Stateless design — no local session state, no local file storage for runtime data  Required |
+| Expose a RESTful or gRPC API with versioning (URI path or header)  Required |
+| Connect to databases and external services via injected configuration (never hardcoded)  Required |
+| Set minimum 2 replicas in production  Required |
 | Configure HPA with CPU target ≤ 70% | SHOULD |
 | Implement circuit breakers for downstream calls | SHOULD |
-| Expose `/metrics` with RED metrics (rate, errors, duration) | MUST |
+| Expose `/metrics` with RED metrics (rate, errors, duration)  Required |
 | Implement request timeouts and retry budgets | SHOULD |
-| Use an internal Service (ClusterIP) for intra-cluster traffic; Route only for external-facing APIs | MUST |
+| Use an internal Service (ClusterIP) for intra-cluster traffic; Route only for external-facing APIs  Required |
 
 **.NET-specific guidance:**
-- Target .NET 8+ (LTS) for all new development and modernization efforts. .NET Framework 4.x applications MUST be migrated to .NET 8+ to run on Linux containers
+- Target .NET 8+ (LTS) for all new development and modernization efforts. .NET Framework 4.x applications are migrated to .NET 8+ to run on Linux containers
 - Use the `Microsoft.Extensions.Configuration` abstraction to bind environment variables and ConfigMaps to strongly-typed options classes
 - Use `IHttpClientFactory` with Polly for resilient HTTP calls (retry, circuit breaker, timeout) — do not instantiate `HttpClient` directly
 - Use ASP.NET Core's built-in health check framework (`Microsoft.Extensions.Diagnostics.HealthChecks`) for `/healthz` and `/ready` endpoints
 - Expose Prometheus metrics via `prometheus-net.AspNetCore` or OpenTelemetry .NET SDK
-- Connection strings for external databases (e.g., MSSQL) MUST be injected via environment variables or mounted Secrets — never in `appsettings.json` baked into the image
+- Connection strings for external databases (e.g., MSSQL) are injected via environment variables or mounted Secrets — never in `appsettings.json` baked into the image
 
 ### 3.3 Data Tier
 
@@ -142,13 +160,13 @@ Most modernization efforts keep the existing database in place and modernize the
 
 | Standard | Requirement Level |
 |----------|-------------------|
-| Database connection strings and credentials MUST be injected via Secrets (never hardcoded, never baked into images) | MUST |
-| Production credentials MUST be sourced from an external secrets manager via External Secrets Operator | MUST |
-| NetworkPolicy egress rules MUST explicitly allow traffic from the API tier to the database host/port | MUST |
-| Connection pooling MUST be configured appropriately for containerized workloads (containers restart more frequently than VMs — set reasonable pool sizes and connection lifetimes) | MUST |
-| Application MUST handle transient database connectivity failures gracefully (retry with backoff, not crash) | MUST |
+| Database connection strings and credentials are injected via Secrets (never hardcoded, never baked into images) | Required |
+| Production credentials are sourced from an external secrets manager via External Secrets Operator | Required |
+| NetworkPolicy egress rules explicitly allow traffic from the API tier to the database host/port | Required |
+| Connection pooling is configured appropriately for containerized workloads (containers restart more frequently than VMs — set reasonable pool sizes and connection lifetimes) | Required |
+| Applications handle transient database connectivity failures gracefully (retry with backoff, not crash) | Required |
 | Schema migrations SHOULD be run as Kubernetes Jobs or via a controlled CI/CD step, not as part of application startup | SHOULD |
-| Database backup and restore procedures MUST be documented and tested, even if managed by a separate team | MUST |
+| Database backup and restore procedures are documented and tested, even if managed by a separate team | Required |
 
 **.NET + MSSQL-specific guidance:**
 - Use `Microsoft.Data.SqlClient` (not the legacy `System.Data.SqlClient`) for SQL Server connectivity
@@ -165,9 +183,36 @@ For dev/test environments, or when the architecture requires a database co-locat
 |----------|-------------------|
 | Use an Operator-managed database (Crunchy PGO, MongoDB Enterprise, Redis Enterprise) when running databases on-cluster in production | SHOULD |
 | Self-managed StatefulSets are acceptable in dev/stage | MAY |
-| Configure automated backups with a tested restore procedure | MUST |
-| Use a dedicated StorageClass with appropriate IOPS and reclaim policy (`Retain` for prod) | MUST |
-| Use headless Services for StatefulSet DNS | MUST |
+| Configure automated backups with a tested restore procedure | Required |
+| Use a dedicated StorageClass with appropriate IOPS and reclaim policy (`Retain` for prod) | Required |
+| Use headless Services for StatefulSet DNS | Required |
+
+### 3.4 Storage Tier
+
+Many legacy applications rely on file shares (SMB/CIFS, NFS, Windows shared drives) for inter-process communication, document storage, or configuration sharing. This pattern does not translate well to containers — pods are ephemeral, shared file systems create tight coupling, and horizontal scaling breaks assumptions about file-based coordination.
+
+#### Legacy File Share Pattern → Cloud-Native Alternative
+
+| Legacy Pattern | Problem in Containers | Cloud-Native Alternative |
+|---------------|----------------------|--------------------------|
+| Shared network drive for document storage | Tight coupling between pods, no lifecycle management, poor performance at scale | **Object storage** (S3-compatible via ODF/NooBaa or external S3) with application-level access via SDK |
+| File-based inter-process communication (drop files, pickup directories) | Race conditions across replicas, no ordering guarantees, breaks with horizontal scaling | **Message queue** (AMQ Streams/Kafka, AMQ Broker) or **event-driven architecture** |
+| Local file storage for user uploads or generated reports | Data lost on pod restart, cannot scale horizontally | **Object storage** with pre-signed URLs for upload/download, or **PVC** (RWO) for single-writer workloads |
+| Config files on shared drives | Environment drift, no auditability, manual updates | **ConfigMaps** and **Secrets** managed via GitOps |
+| Log files written to shared volumes | No structured indexing, hard to search, fills disk | **Structured logging to stdout** → platform log aggregation (Loki/Splunk) |
+| Temp files for processing | Breaks with multiple replicas, fills local storage | **EmptyDir volumes** (ephemeral, per-pod) for scratch space, or offload to object storage for durable processing |
+
+#### When Persistent Storage Is Justified
+
+Some workloads legitimately need persistent, file-system-like storage. Use PersistentVolumeClaims (PVCs) with the appropriate access mode:
+
+| Access Mode | Use Case | Example |
+|-------------|----------|---------|
+| **RWO** (ReadWriteOnce) | Single pod writes, others read from API/service | Database data directory, single-instance processing |
+| **RWX** (ReadWriteMany) | Multiple pods need concurrent file access | Shared content repository (use sparingly — prefer object storage) |
+| **ROX** (ReadOnlyMany) | Multiple pods read static content | Shared reference data, ML models |
+
+> **Decision rule:** If the data is unstructured (documents, images, reports), default to **object storage**. If the data is structured and queried, use a **database**. Use PVCs with RWX only when object storage or a database genuinely cannot serve the access pattern — and document the justification.
 
 ---
 
@@ -175,9 +220,9 @@ For dev/test environments, or when the architecture requires a database co-locat
 
 These are non-negotiable. Exceptions require documented approval from the security team.
 
-### 4.1 Pod Security (MUST)
+### 4.1 Pod Security
 
-All workloads MUST comply with the `restricted-v2` Security Context Constraint:
+All workloads comply with the `restricted-v2` Security Context Constraint:
 
 - `runAsNonRoot: true`
 - `allowPrivilegeEscalation: false`
@@ -186,9 +231,9 @@ All workloads MUST comply with the `restricted-v2` Security Context Constraint:
 
 Any request for elevated SCCs (`anyuid`, `privileged`) requires a written exception with justification, time-bound approval, and a remediation plan.
 
-### 4.2 Network Segmentation (MUST)
+### 4.2 Network Segmentation
 
-Every application namespace MUST deploy NetworkPolicies:
+Every application namespace deploys NetworkPolicies:
 
 1. **Default deny all ingress** — baseline policy, no exceptions
 2. **Explicit allow rules** — whitelist traffic between tiers:
@@ -198,17 +243,17 @@ Every application namespace MUST deploy NetworkPolicies:
    - API → other external services (egress rules scoped to specific hosts/CIDRs as needed)
 3. **No open namespaces** — a namespace without NetworkPolicies will not pass security review
 
-### 4.3 Image Provenance (MUST)
+### 4.3 Image Provenance
 
-- Images MUST be pulled from an approved registry (Quay, OpenShift internal registry, Red Hat registry)
-- Images MUST be built in a CI pipeline — no `docker build` on developer laptops pushed to prod
-- Images MUST pass ACS vulnerability scanning before deployment
-- Base images MUST use Red Hat UBI (Universal Base Image) or an approved alternative. For .NET workloads, use `registry.access.redhat.com/ubi8/dotnet-80-runtime` (runtime) or `ubi8/dotnet-80` (SDK) images
-- Image tags MUST use immutable references (SHA digests) in production GitOps manifests, not `:latest`
+- Images are pulled from an approved registry (Quay, OpenShift internal registry, Red Hat registry)
+- Images are built in a CI pipeline — no `docker build` on developer laptops pushed to prod
+- Images pass ACS vulnerability scanning before deployment
+- Base images use Red Hat UBI (Universal Base Image) or an approved alternative. For .NET workloads, use `registry.access.redhat.com/ubi8/dotnet-80-runtime` (runtime) or `ubi8/dotnet-80` (SDK) images
+- Image tags use immutable references (SHA digests) in production GitOps manifests, not `:latest`
 
-### 4.4 RBAC (MUST)
+### 4.4 RBAC
 
-- Application ServiceAccounts MUST follow least-privilege — only the permissions the workload actually needs
+- Application ServiceAccounts follow least-privilege — only the permissions the workload actually needs
 - Do not use `cluster-admin` or `admin` ClusterRoles for application workloads
 - Namespace-scoped Roles are preferred over ClusterRoles
 
@@ -216,9 +261,9 @@ Every application namespace MUST deploy NetworkPolicies:
 
 ## 5. CI/CD & GitOps Standards
 
-### 5.1 Pipeline Requirements (MUST)
+### 5.1 Pipeline Requirements
 
-Every application MUST have an automated CI/CD pipeline. Manual deployments to staging or production are not permitted.
+Every application has an automated CI/CD pipeline. Manual deployments to staging or production are not permitted.
 
 **CI pipeline stages (in order):**
 
@@ -240,9 +285,9 @@ Every application MUST have an automated CI/CD pipeline. Manual deployments to s
 10. Post-deploy smoke test / health check validation
 ```
 
-### 5.2 GitOps Repository Structure (MUST)
+### 5.2 GitOps Repository Structure
 
-All application deployments MUST be managed via a GitOps repository. ArgoCD is the standard deployment tool.
+All application deployments are managed via a GitOps repository. ArgoCD is the standard deployment tool.
 
 ```
 <app>-gitops/
@@ -273,15 +318,53 @@ All application deployments MUST be managed via a GitOps repository. ArgoCD is t
 │       └── patches/
 ```
 
-### 5.3 Environment Promotion (MUST)
+### 5.3 Environment Promotion
 
 - **Dev → Stage**: Automated on merge to `main`. Image digest propagated via CI pipeline
 - **Stage → Prod**: Requires manual approval gate (PR to `overlays/prod` in GitOps repo)
-- Environment-specific configuration MUST live in Kustomize patches, not in the application code or image
+- Environment-specific configuration lives in Kustomize patches, not in the application code or image
 
 ---
 
-## 6. Modernization Maturity Model
+## 6. Legacy Code Patterns → Cloud-Native Rewrites
+
+Modernizing isn't just about putting your app in a container. These are the specific code-level changes that need to happen — think of them as migration rules, similar to what [Red Hat Migration Toolkit for Applications (MTA)](https://developers.redhat.com/products/mta/overview) flags automatically. This section answers: _"I write my legacy code this way — how do I rewrite it for cloud-native?"_
+
+### Application Architecture
+
+| Legacy Pattern | Why It Breaks on OpenShift | Cloud-Native Replacement |
+|---------------|---------------------------|--------------------------|
+| In-memory session state (`Session["user"]`, `HttpContext.Session`) | Lost on pod restart or reschedule; breaks with multiple replicas behind a load balancer | Externalize to Redis or SQL-backed session store. Use `IDistributedCache` in .NET |
+| Hardcoded connection strings in `web.config` or `appsettings.json` | Image must be rebuilt per environment; secrets exposed in image layers | Inject via environment variables or mounted Secrets. Use `Microsoft.Extensions.Configuration` with env var providers |
+| Singleton patterns holding runtime state | State lost on restart; conflicts across replicas | Move state to an external store (Redis, database). Keep singletons stateless |
+| Writing to the local file system (logs, temp files, uploads) | Container filesystem is ephemeral; files disappear on restart; no sharing across replicas | Logs → stdout. Uploads → object storage. Temp → `EmptyDir` volumes |
+| Windows Registry access | No registry in Linux containers | Environment variables or ConfigMaps |
+| Windows Event Log writes | Not available on Linux; not collected by platform logging | `ILogger` → structured JSON to stdout |
+| Scheduled tasks via Windows Task Scheduler or cron inside the container | Missed schedules on restart; duplicate execution across replicas | Kubernetes CronJobs for periodic tasks; Kubernetes Jobs for one-time work |
+| COM/DCOM interop or .NET Remoting | Not supported on .NET 8+ or Linux | gRPC for inter-service communication; REST APIs; message queues |
+| GAC (Global Assembly Cache) dependencies | Not available in containers | NuGet packages, self-contained deployments |
+
+### Networking & Communication
+
+| Legacy Pattern | Why It Breaks | Cloud-Native Replacement |
+|---------------|---------------|--------------------------|
+| Hardcoded IP addresses for services | IPs change as pods reschedule | Kubernetes Service DNS (`myservice.mynamespace.svc.cluster.local`) |
+| Custom service discovery / registry | Unnecessary complexity; platform provides this | Kubernetes Services + DNS |
+| Sticky sessions / server affinity | Prevents horizontal scaling; breaks on pod replacement | Stateless design + external session store. If truly unavoidable, use Route session affinity as a short-term bridge |
+| Direct database connections from the UI tier | Security risk; no connection management | API tier mediates all database access; UI tier talks only to APIs |
+
+### Security
+
+| Legacy Pattern | Why It Fails | Cloud-Native Replacement |
+|---------------|-------------|--------------------------|
+| Running as Administrator / SYSTEM | OpenShift rejects root containers under `restricted-v2` SCC | Run as non-root (UID ≥ 1000). Build images with a non-root `USER` directive |
+| Self-signed certs managed by the app | Operational burden; breaks automation | Platform TLS via Routes (edge or reencrypt termination) |
+| Custom authentication / credential management | Security risk; duplicates platform capability | Integrate with platform OIDC/OAuth provider |
+| Storing secrets in config files or environment variables in source control | Secrets leaked in Git history | External Secrets Operator → Vault/Key Vault; SealedSecrets for GitOps |
+
+---
+
+## 7. Modernization Maturity Model
 
 Not every application starts cloud-native. Use this maturity model to assess where an application is today and define a concrete path forward.
 
@@ -312,7 +395,7 @@ The application runs in a Linux container on OpenShift but has not been redesign
 
 ### Level 2: Cloud-Ready
 
-The application meets all MUST requirements in this document and can be deployed reliably via GitOps. The data tier remains where it is — what changes is how the application connects to it, monitors itself, and gets deployed.
+The application meets all requirements in this document and can be deployed reliably via GitOps. The data tier remains where it is — what changes is how the application connects to it, monitors itself, and gets deployed.
 
 | Characteristic | Status |
 |----------------|--------|
@@ -350,7 +433,7 @@ The application is decomposed into independently deployable services and takes f
 
 ---
 
-## 7. Extension Catalog
+## 8. Extension Catalog
 
 These components are available when application requirements justify them. They are not part of the baseline — each adds operational complexity and should be adopted deliberately.
 
@@ -369,7 +452,7 @@ These components are available when application requirements justify them. They 
 
 ---
 
-## 8. Baseline Architecture Diagram
+## 9. Baseline Architecture Diagram
 
 Every well-architected application on this platform follows this foundational pattern. Extensions from the catalog above are layered on top.
 
@@ -433,11 +516,63 @@ Every well-architected application on this platform follows this foundational pa
 
 ---
 
-## 9. Governance & Compliance Checklist
+## 10. Application Onboarding Decision Tree
+
+Use this decision tree when evaluating a custom application for deployment on the platform. It provides a standard intake assessment that spans development, security, and operations concerns.
+
+```
+Is the application containerized?
+├── NO → Can it be containerized?
+│   ├── NO (hard OS/kernel dependencies, proprietary runtime)
+│   │   → Not a candidate for OpenShift. Escalate for alternative hosting.
+│   └── YES → Proceed to containerization (target Maturity Level 1)
+│       ├── .NET apps: target .NET 8+ on UBI base images
+│       └── Other stacks: target supported runtime on UBI base images
+│
+└── YES → Does it run as non-root?
+    ├── NO → Can it be modified to run non-root?
+    │   ├── YES → Fix and re-assess
+    │   └── NO → Requires SCC exception (security team approval required)
+    │
+    └── YES → Does it rely on local file storage or file shares?
+        ├── YES → Identify usage patterns
+        │   └── See Section 3.4 (Storage Tier) for migration alternatives
+        │
+        └── NO → Does it externalize all configuration?
+            ├── NO → Migrate hardcoded config to env vars / ConfigMaps / Secrets
+            │
+            └── YES → Does it implement health probes?
+                ├── NO → Implement /healthz and /ready endpoints
+                │
+                └── YES → Does it log structured output to stdout?
+                    ├── NO → Migrate logging to structured JSON on stdout
+                    │
+                    └── YES → Does it expose /metrics?
+                        ├── NO → Add Prometheus metrics endpoint
+                        │
+                        └── YES → ✅ Ready for platform onboarding
+                            └── Proceed to Governance Checklist (Section 11)
+```
+
+### Intake Responsibilities by Role
+
+Platform onboarding is not just a developer exercise. Successful onboarding requires coordination across teams:
+
+| Role | Responsibility During Onboarding |
+|------|----------------------------------|
+| **Application Developer** | Containerize the app, implement health probes, externalize config, add metrics/logging, eliminate file share dependencies |
+| **Security Engineer** | Review SCC requirements, validate NetworkPolicy design, approve image base and scanning results, confirm secrets management approach |
+| **Operations / SRE** | Define resource quotas, validate scaling strategy, ensure monitoring/alerting is wired up, confirm runbook and on-call readiness |
+| **Platform Team** | Provision namespace, configure GitOps sync, validate CI/CD pipeline integration, approve external network egress rules |
+| **Database / Storage Team** | Validate connectivity from cluster to external databases, confirm backup/restore procedures, advise on storage alternatives for file shares |
+
+---
+
+## 11. Governance & Compliance Checklist
 
 Use this checklist during application onboarding and periodic reviews.
 
-### Pre-Deployment Gate (MUST pass all)
+### Pre-Deployment Gate (all required)
 
 - [ ] Container runs as non-root with `restricted-v2` SCC
 - [ ] Readiness and liveness probes implemented and tested

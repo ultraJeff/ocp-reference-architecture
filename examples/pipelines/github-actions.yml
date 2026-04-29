@@ -1,4 +1,4 @@
-# CI/CD Pipeline for .NET 8 on OpenShift
+# CI/CD Pipeline for .NET 10 on OpenShift
 #
 # Required secrets:
 #   QUAY_USERNAME        - Quay.io registry username
@@ -20,7 +20,7 @@ on:
     branches: [main]
 
 env:
-  DOTNET_VERSION: "8.0.x"
+  DOTNET_VERSION: "10.0.x"
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
 
 jobs:

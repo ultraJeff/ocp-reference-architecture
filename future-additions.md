@@ -93,8 +93,8 @@ resource-sizing.md
 │   ├── CPU throttling vs. OOMKill — different failure modes
 │   └── Quality of Service classes (Guaranteed, Burstable, BestEffort)
 ├── Starting points by runtime
-│   ├── .NET 8 API:     requests 250m/256Mi, limits 1/512Mi
-│   ├── .NET 8 UI:      requests 100m/128Mi, limits 500m/256Mi
+│   ├── .NET 10 API:     requests 250m/256Mi, limits 1/512Mi
+│   ├── .NET 10 UI:      requests 100m/128Mi, limits 500m/256Mi
 │   ├── Java (Quarkus): requests 250m/256Mi, limits 1/512Mi
 │   ├── Java (Spring):  requests 500m/512Mi, limits 1/1Gi
 │   ├── Node.js:        requests 100m/128Mi, limits 500m/256Mi

@@ -1,4 +1,4 @@
-# Tekton Pipeline for .NET 8 on OpenShift
+# Tekton Pipeline for .NET 10 on OpenShift
 #
 # Prerequisites:
 #   - OpenShift Pipelines operator installed
@@ -51,17 +51,17 @@ spec:
           - name: source
         steps:
           - name: restore
-            image: registry.access.redhat.com/ubi8/dotnet-80
+            image: registry.access.redhat.com/ubi9/dotnet-100
             workingDir: $(workspaces.source.path)
             command: [dotnet]
             args: [restore]
           - name: format-check
-            image: registry.access.redhat.com/ubi8/dotnet-80
+            image: registry.access.redhat.com/ubi9/dotnet-100
             workingDir: $(workspaces.source.path)
             command: [dotnet]
             args: [format, --verify-no-changes]
           - name: test
-            image: registry.access.redhat.com/ubi8/dotnet-80
+            image: registry.access.redhat.com/ubi9/dotnet-100
             workingDir: $(workspaces.source.path)
             command: [dotnet]
             args: [test, --no-restore, --verbosity, normal]

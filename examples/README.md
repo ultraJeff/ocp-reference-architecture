@@ -28,7 +28,7 @@ kustomize build examples/overlays/dev | oc apply -f -
 ## CI/CD Pipelines
 
 The `pipelines/` directory includes templates for:
-- **GitHub Actions** — `.github/workflows`-compatible workflow for .NET 8 apps
+- **GitHub Actions** — `.github/workflows`-compatible workflow for .NET 10 apps
 - **Tekton** — Kubernetes-native pipeline with PipelineRun example
 
 See [CI/CD & GitOps Standards](cicd.html) for the full pipeline requirements these templates implement.

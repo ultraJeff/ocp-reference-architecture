@@ -97,6 +97,7 @@ Quick reference for acronyms and technical terms used throughout this guide.
 | **AMQ Streams** | Red Hat's Kafka distribution for event streaming, log aggregation, and data pipelines |
 | **ClusterLogForwarder** | An OpenShift resource that collects container logs and forwards them to external systems (Loki, Splunk, etc.) |
 | **External Secrets Operator** | A Kubernetes Operator that syncs secrets from external vaults (HashiCorp Vault, AWS Secrets Manager) into Kubernetes Secrets |
+| **Dev Spaces** | OpenShift Dev Spaces — a cloud development environment running on the cluster, providing a browser-based IDE or remote connection from local IDEs. Workspaces are defined by devfiles |
 | **MTA** | Migration Toolkit for Applications — a Red Hat tool that scans legacy code and identifies patterns needing modernization |
 
 ## .NET Specific

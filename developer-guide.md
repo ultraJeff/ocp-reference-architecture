@@ -6,9 +6,25 @@ nav_order: 10
 
 # Developer Inner Loop
 
-The standards in this document describe what production looks like. This section covers how to develop against those standards locally — so issues are caught on your laptop, not in the CI pipeline.
+The standards in this document describe what production looks like. This section covers how to develop against those standards — whether in a cloud workspace or on your laptop — so issues are caught early, not in the CI pipeline.
+
+## OpenShift Dev Spaces
+
+[OpenShift Dev Spaces](https://developers.redhat.com/products/openshift-dev-spaces/overview) is the platform-provided cloud development environment. It runs on the cluster and gives every developer a consistent, pre-configured workspace without requiring local tooling setup.
+
+| Capability | How It Works |
+|------------|-------------|
+| **Web IDE** | Browser-based VS Code experience — no local install required. Open a workspace from a Git repo URL and start coding immediately |
+| **Remote connection from local IDE** | Connect VS Code or JetBrains locally to a Dev Spaces workspace running on the cluster. You get your preferred IDE with cluster-side compute, networking, and dependencies |
+| **Devfile-driven** | Workspaces are defined by a `devfile.yaml` in your repo — runtime, tools, endpoints, and commands are version-controlled and shared across the team |
+| **Pre-built dependencies** | Container images, SDKs, CLIs, and database clients are available in the workspace without manual setup |
+| **Direct cluster access** | Workspaces run inside the cluster with access to services, databases, and APIs via internal DNS — no VPN or port-forwarding required |
+
+**When to use Dev Spaces:** When you want a zero-setup development experience, need direct access to cluster services, or want to standardize the dev environment across the team. Especially valuable for onboarding new developers — they open a browser and start working.
 
 ## Local Development Tooling
+
+For developers who prefer working on their laptop, these tools support the same inner-loop workflow:
 
 | Tool | What It Does | When to Use |
 |------|-------------|-------------|

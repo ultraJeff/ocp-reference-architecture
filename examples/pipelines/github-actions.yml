@@ -1,0 +1,92 @@
+# CI/CD Pipeline for .NET 8 on OpenShift
+#
+# Required secrets:
+#   QUAY_USERNAME        - Quay.io registry username
+#   QUAY_PASSWORD        - Quay.io registry password
+#   ROX_API_TOKEN        - ACS API token for image scanning
+#   ROX_CENTRAL_ENDPOINT - ACS Central endpoint (e.g., central-acs.apps.example.com:443)
+#   GITOPS_REPO_TOKEN    - PAT with write access to the GitOps repository
+#
+# Required variables:
+#   IMAGE_NAME           - e.g., quay.io/myorg/myapp-api
+#   GITOPS_REPO          - e.g., myorg/myapp-gitops
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Check formatting
+        run: dotnet format --verify-no-changes
+
+      - name: Run tests
+        run: dotnet test --no-restore --verbosity normal
+
+  build-scan-push:
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      image-digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build container image
+        run: |
+          podman build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+
+      - name: Scan image with ACS
+        run: |
+          curl -sk -L https://${{ secrets.ROX_CENTRAL_ENDPOINT }}/api/cli/download/roxctl-linux \
+            -o roxctl && chmod +x roxctl
+          ./roxctl --insecure-skip-tls-verify \
+            -e ${{ secrets.ROX_CENTRAL_ENDPOINT }} \
+            image check \
+            --image ${{ env.IMAGE_NAME }}:${{ github.sha }}
+        env:
+          ROX_API_TOKEN: ${{ secrets.ROX_API_TOKEN }}
+
+      - name: Push to Quay
+        id: push
+        run: |
+          podman login -u ${{ secrets.QUAY_USERNAME }} -p ${{ secrets.QUAY_PASSWORD }} quay.io
+          podman push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          DIGEST=$(podman inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format '{{.Digest}}')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+  update-gitops:
+    needs: build-scan-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update GitOps repo with new image digest
+        run: |
+          git clone https://x-access-token:${{ secrets.GITOPS_REPO_TOKEN }}@github.com/${{ vars.GITOPS_REPO }}.git gitops
+          cd gitops/overlays/dev
+          kustomize edit set image ${{ env.IMAGE_NAME }}@${{ needs.build-scan-push.outputs.image-digest }}
+          git config user.name "CI Pipeline"
+          git config user.email "ci@example.com"
+          git add .
+          git commit -m "Update image to ${{ needs.build-scan-push.outputs.image-digest }}"
+          git push

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: myapp-prod
+
+resources:
+  - ../../base
+
+patches:
+  - path: patches/deployment-ui-patch.yaml
+  - path: patches/deployment-api-patch.yaml
+
+images:
+  - name: quay.io/myorg/myapp-ui
+    newName: quay.io/myorg/myapp-ui
+    digest: sha256:replace-with-actual-digest
+  - name: quay.io/myorg/myapp-api
+    newName: quay.io/myorg/myapp-api
+    digest: sha256:replace-with-actual-digest

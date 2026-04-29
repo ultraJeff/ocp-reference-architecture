@@ -1,0 +1,44 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: myapp-alerts
+  labels:
+    app.kubernetes.io/name: myapp
+spec:
+  groups:
+    - name: myapp.rules
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job="myapp-api", code=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="myapp-api"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High error rate on myapp-api"
+            description: "Error rate is above 5% for the last 5 minutes (current: {{ $value | humanizePercentage }})"
+
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job="myapp-api"}[5m])) by (le))
+            > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High p99 latency on myapp-api"
+            description: "p99 latency is above 2 seconds for the last 5 minutes (current: {{ $value | humanizeDuration }})"
+
+        - alert: FrequentPodRestarts
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="myapp-prod", container=~"ui|api"}[15m]) > 3
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Frequent pod restarts for {{ $labels.container }}"
+            description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes"

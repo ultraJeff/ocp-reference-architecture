@@ -49,12 +49,44 @@ These code examples show the most impactful changes. Each is a real pattern team
 ### Session State
 
 **Before** — in-memory session (breaks with multiple replicas):
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 // Startup.cs — legacy pattern
 builder.Services.AddSession(); // In-memory, lost on pod restart
 ```
+</details>
+
+<details>
+<summary><strong>Java (Spring Boot)</strong></summary>
+
+```java
+// Legacy — in-memory HttpSession, lost on pod restart
+@GetMapping("/dashboard")
+public String dashboard(HttpSession session) {
+    session.setAttribute("user", currentUser);
+    return "dashboard";
+}
+```
+</details>
+
+<details>
+<summary><strong>Node.js (Express)</strong></summary>
+
+```javascript
+// Legacy — in-memory session store, lost on pod restart
+const session = require('express-session');
+app.use(session({ secret: 'keyboard-cat', resave: false }));
+```
+</details>
 
 **After** — externalized to Redis:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 // Program.cs — cloud-native
 builder.Services.AddStackExchangeRedisCache(options =>
@@ -67,10 +99,55 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 ```
+</details>
+
+<details>
+<summary><strong>Java (Spring Boot)</strong></summary>
+
+```java
+// application.yaml — externalized to Redis via Spring Session
+// spring.data.redis.host is injected via ConfigMap/env var
+@EnableRedisHttpSession(maxInactiveIntervalInSeconds = 1200)
+@Configuration
+public class SessionConfig {
+    @Bean
+    public RedisConnectionFactory connectionFactory(
+            @Value("${spring.data.redis.host}") String host,
+            @Value("${spring.data.redis.port:6379}") int port) {
+        return new LettuceConnectionFactory(host, port);
+    }
+}
+```
+</details>
+
+<details>
+<summary><strong>Node.js (Express)</strong></summary>
+
+```javascript
+// Cloud-native — Redis-backed sessions
+const session = require('express-session');
+const RedisStore = require('connect-redis').default;
+const { createClient } = require('redis');
+
+const redisClient = createClient({ url: process.env.REDIS_URL });
+await redisClient.connect();
+
+app.use(session({
+  store: new RedisStore({ client: redisClient }),
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+}));
+```
+</details>
 
 ### Configuration
 
-**Before** — hardcoded in `appsettings.json`, baked into image:
+**Before** — hardcoded config baked into image:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```json
 {
   "ConnectionStrings": {
@@ -78,8 +155,35 @@ builder.Services.AddSession(options =>
   }
 }
 ```
+</details>
+
+<details>
+<summary><strong>Java</strong></summary>
+
+```properties
+# application.properties — baked into JAR
+spring.datasource.url=jdbc:postgresql://proddb01:5432/myapp
+spring.datasource.username=admin
+spring.datasource.password=hunter2
+```
+</details>
+
+<details>
+<summary><strong>Node.js</strong></summary>
+
+```javascript
+// config.js — hardcoded
+module.exports = {
+  db: { host: 'proddb01', port: 5432, password: 'hunter2' }
+};
+```
+</details>
 
 **After** — injected via environment variables, secrets managed externally:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 // Program.cs
 builder.Configuration.AddEnvironmentVariables();
@@ -89,18 +193,79 @@ builder.Configuration.AddEnvironmentVariables();
 //   - ConfigMap mounted as env vars (non-sensitive)
 //   - Secret mounted as env vars (sensitive, sourced from ExternalSecret)
 ```
+</details>
+
+<details>
+<summary><strong>Java (Spring Boot)</strong></summary>
+
+```yaml
+# application.yaml — structure only, values from env vars
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+```
+</details>
+
+<details>
+<summary><strong>Node.js</strong></summary>
+
+```javascript
+// config.js — reads from environment
+module.exports = {
+  db: {
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT || '5432'),
+    password: process.env.DB_PASSWORD,
+  }
+};
+```
+</details>
 
 ### Logging
 
 **Before** — writing to files or Windows Event Log:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 // Legacy pattern — logs to a file, not collected by platform
 Log.Logger = new LoggerConfiguration()
     .WriteTo.File("C:\\Logs\\myapp.log")
     .CreateLogger();
 ```
+</details>
+
+<details>
+<summary><strong>Java</strong></summary>
+
+```xml
+<!-- logback.xml — writing to file -->
+<appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    <file>/var/log/myapp.log</file>
+    <encoder><pattern>%d %level %msg%n</pattern></encoder>
+</appender>
+```
+</details>
+
+<details>
+<summary><strong>Node.js</strong></summary>
+
+```javascript
+// Legacy — writing to file
+const fs = require('fs');
+const logStream = fs.createWriteStream('/var/log/myapp.log', { flags: 'a' });
+logStream.write(`${new Date().toISOString()} INFO: ${message}\n`);
+```
+</details>
 
 **After** — structured JSON to stdout, collected automatically by the platform:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 // Program.cs
 builder.Host.UseSerilog((context, config) => config
@@ -108,15 +273,75 @@ builder.Host.UseSerilog((context, config) => config
     .Enrich.WithProperty("ApplicationName", "my-api")
     .Enrich.WithCorrelationId());
 ```
+</details>
+
+<details>
+<summary><strong>Java (Spring Boot / Logback)</strong></summary>
+
+```xml
+<!-- logback-spring.xml — structured JSON to stdout -->
+<appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <customFields>{"applicationName":"my-api"}</customFields>
+    </encoder>
+</appender>
+<root level="INFO">
+    <appender-ref ref="STDOUT"/>
+</root>
+```
+</details>
+
+<details>
+<summary><strong>Node.js (Pino)</strong></summary>
+
+```javascript
+// Structured JSON to stdout via Pino
+const pino = require('pino');
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+  base: { applicationName: 'my-api' },
+});
+logger.info({ correlationId: req.headers['x-correlation-id'] }, 'Request received');
+```
+</details>
 
 ### Health Checks
 
 **Before** — no health endpoints, or a simple "200 OK" that checks nothing:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 app.MapGet("/livez", () => "OK"); // Tells you nothing useful
 ```
+</details>
 
-**After** — meaningful checks using ASP.NET Core health check framework:
+<details>
+<summary><strong>Java</strong></summary>
+
+```java
+@GetMapping("/livez")
+public String health() { return "OK"; } // Tells you nothing useful
+```
+</details>
+
+<details>
+<summary><strong>Node.js</strong></summary>
+
+```javascript
+app.get('/livez', (req, res) => res.send('OK')); // Tells you nothing useful
+```
+</details>
+
+**After** — meaningful checks with separate liveness and readiness:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 // Program.cs
 builder.Services.AddHealthChecks()
@@ -141,17 +366,87 @@ app.MapHealthChecks("/readyz", new HealthCheckOptions
     Predicate = check => check.Tags.Contains("ready")
 });
 ```
+</details>
+
+<details>
+<summary><strong>Java (Spring Boot Actuator)</strong></summary>
+
+```yaml
+# application.yaml — Spring Boot Actuator health groups
+management:
+  endpoints.web.exposure.include: health,prometheus
+  endpoint.health:
+    show-details: never
+    group:
+      liveness:
+        include: ping          # /actuator/health/liveness — no dependency checks
+      readiness:
+        include: db,redis      # /actuator/health/readiness — checks dependencies
+  health:
+    livenessstate.enabled: true
+    readinessprobe.enabled: true
+```
+</details>
+
+<details>
+<summary><strong>Node.js (Express)</strong></summary>
+
+```javascript
+// Liveness — is the process alive? Don't check dependencies.
+app.get('/livez', (req, res) => res.status(200).json({ status: 'ok' }));
+
+// Readiness — can I serve traffic? Check dependencies.
+app.get('/readyz', async (req, res) => {
+  try {
+    await db.query('SELECT 1');
+    await redisClient.ping();
+    res.status(200).json({ status: 'ready' });
+  } catch (err) {
+    res.status(503).json({ status: 'not ready', error: err.message });
+  }
+});
+```
+</details>
 
 ### Resilient HTTP Calls
 
-**Before** — manually creating `HttpClient`, no retry logic:
+**Before** — manually creating HTTP clients, no retry logic:
+
+<details open>
+<summary><strong>.NET</strong></summary>
+
 ```csharp
 // Legacy — socket exhaustion, no resilience
 var client = new HttpClient();
 var response = await client.GetAsync("http://other-service/api/data");
 ```
+</details>
 
-**After** — `IHttpClientFactory` with standard resilience handler (retry, circuit breaker, timeout built in):
+<details>
+<summary><strong>Java</strong></summary>
+
+```java
+// Legacy — no retry, no timeout, no circuit breaker
+HttpURLConnection conn = (HttpURLConnection)
+    new URL("http://other-service/api/data").openConnection();
+InputStream is = conn.getInputStream();
+```
+</details>
+
+<details>
+<summary><strong>Node.js</strong></summary>
+
+```javascript
+// Legacy — no retry, no timeout management
+const resp = await fetch('http://other-service/api/data');
+```
+</details>
+
+**After** — managed clients with retry and circuit breaker:
+
+<details open>
+<summary><strong>.NET (IHttpClientFactory + Standard Resilience)</strong></summary>
+
 ```csharp
 // Program.cs — uses Microsoft.Extensions.Http.Resilience (not the legacy Microsoft.Extensions.Http.Polly)
 builder.Services.AddHttpClient("OrderService", client =>
@@ -173,6 +468,72 @@ public class OrderClient(IHttpClientFactory factory)
     }
 }
 ```
+</details>
+
+<details>
+<summary><strong>Java (Spring Boot + Resilience4j)</strong></summary>
+
+```java
+// application.yaml — resilience config
+resilience4j:
+  retry:
+    instances:
+      orderService:
+        maxAttempts: 3
+        waitDuration: 200ms
+        exponentialBackoffMultiplier: 2
+  circuitbreaker:
+    instances:
+      orderService:
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        slidingWindowSize: 10
+
+// OrderClient.java
+@Service
+public class OrderClient {
+    private final WebClient webClient;
+
+    public OrderClient(WebClient.Builder builder,
+                       @Value("${services.order.base-url}") String baseUrl) {
+        this.webClient = builder.baseUrl(baseUrl).build();
+    }
+
+    @Retry(name = "orderService")
+    @CircuitBreaker(name = "orderService", fallbackMethod = "fallback")
+    public Mono<Order> getOrder(int id) {
+        return webClient.get().uri("/api/orders/{id}", id)
+            .retrieve().bodyToMono(Order.class);
+    }
+}
+```
+</details>
+
+<details>
+<summary><strong>Node.js (cockatiel)</strong></summary>
+
+```javascript
+const { retry, circuitBreaker, wrap, handleAll, ExponentialBackoff } = require('cockatiel');
+
+const retryPolicy = retry(handleAll, {
+  maxAttempts: 3,
+  backoff: new ExponentialBackoff({ initialDelay: 200 }),
+});
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 30_000,
+  breaker: { threshold: 0.5, duration: 10_000, minimumRps: 5 },
+});
+const policy = wrap(retryPolicy, breaker);
+
+async function getOrder(id) {
+  return policy.execute(() =>
+    fetch(`${process.env.ORDER_SERVICE_URL}/api/orders/${id}`, {
+      signal: AbortSignal.timeout(10_000),
+    }).then(r => r.json())
+  );
+}
+```
+</details>
 
 ### Service Discovery
 

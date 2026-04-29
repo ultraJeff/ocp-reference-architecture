@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-ui
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: ui
+  ingress:
+    # Allow traffic from OpenShift Router
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ui-to-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: api
+  ingress:
+    # Allow traffic from UI pods and OpenShift Router
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: ui
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - port: 8080
+          protocol: TCP

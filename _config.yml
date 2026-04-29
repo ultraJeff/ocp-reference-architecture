@@ -8,6 +8,9 @@ plugins:
 
 color_scheme: dark
 
+search_enabled: true
+search.button: true
+
 aux_links:
   "View on GitHub":
     - "https://github.com/ultraJeff/ocp-reference-architecture"
@@ -19,3 +22,6 @@ exclude:
   - LICENSE
   - Gemfile
   - Gemfile.lock
+  - examples/base
+  - examples/overlays
+  - examples/pipelines

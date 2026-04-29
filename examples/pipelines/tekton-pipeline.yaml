@@ -1,0 +1,186 @@
+# Tekton Pipeline for .NET 8 on OpenShift
+#
+# Prerequisites:
+#   - OpenShift Pipelines operator installed
+#   - ClusterTasks available: git-clone, buildah
+#   - Workspace PVC provisioned
+#   - Secrets created: quay-credentials (docker config), roxctl-token, gitops-token
+#
+# Usage:
+#   oc apply -f tekton-pipeline.yaml
+#   # Then create a PipelineRun (example at bottom of file)
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: myapp-ci
+spec:
+  params:
+    - name: git-url
+      type: string
+    - name: git-revision
+      type: string
+      default: main
+    - name: image-name
+      type: string
+      default: quay.io/myorg/myapp-api
+    - name: gitops-repo-url
+      type: string
+  workspaces:
+    - name: shared-workspace
+    - name: docker-credentials
+
+  tasks:
+    - name: clone
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+
+    - name: lint-and-test
+      runAfter: [clone]
+      taskSpec:
+        workspaces:
+          - name: source
+        steps:
+          - name: restore
+            image: registry.access.redhat.com/ubi8/dotnet-80
+            workingDir: $(workspaces.source.path)
+            command: [dotnet]
+            args: [restore]
+          - name: format-check
+            image: registry.access.redhat.com/ubi8/dotnet-80
+            workingDir: $(workspaces.source.path)
+            command: [dotnet]
+            args: [format, --verify-no-changes]
+          - name: test
+            image: registry.access.redhat.com/ubi8/dotnet-80
+            workingDir: $(workspaces.source.path)
+            command: [dotnet]
+            args: [test, --no-restore, --verbosity, normal]
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+    - name: build-and-push
+      runAfter: [lint-and-test]
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      params:
+        - name: IMAGE
+          value: $(params.image-name):$(tasks.clone.results.commit)
+        - name: TLSVERIFY
+          value: "true"
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: dockerconfig
+          workspace: docker-credentials
+
+    - name: scan-image
+      runAfter: [build-and-push]
+      taskSpec:
+        params:
+          - name: image
+            type: string
+        steps:
+          - name: roxctl-check
+            image: registry.access.redhat.com/ubi8/ubi-minimal
+            env:
+              - name: ROX_API_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: roxctl-token
+                    key: token
+              - name: ROX_CENTRAL_ENDPOINT
+                valueFrom:
+                  secretKeyRef:
+                    name: roxctl-token
+                    key: endpoint
+            script: |
+              #!/usr/bin/env bash
+              curl -sk -L "https://${ROX_CENTRAL_ENDPOINT}/api/cli/download/roxctl-linux" -o roxctl
+              chmod +x roxctl
+              ./roxctl --insecure-skip-tls-verify -e "${ROX_CENTRAL_ENDPOINT}" \
+                image check --image "$(params.image)"
+        params:
+          - name: image
+      params:
+        - name: image
+          value: $(params.image-name):$(tasks.clone.results.commit)
+
+    - name: update-gitops
+      runAfter: [scan-image]
+      taskSpec:
+        params:
+          - name: gitops-repo-url
+            type: string
+          - name: image-name
+            type: string
+          - name: image-digest
+            type: string
+        steps:
+          - name: update-manifests
+            image: registry.access.redhat.com/ubi8/ubi-minimal
+            env:
+              - name: GITOPS_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    name: gitops-token
+                    key: token
+            script: |
+              #!/usr/bin/env bash
+              dnf install -y git
+              curl -sL https://github.com/kubernetes-sigs/kustomize/releases/latest/download/kustomize_v5.0.0_linux_amd64.tar.gz | tar xz
+              git clone "https://ci:${GITOPS_TOKEN}@$(params.gitops-repo-url)" gitops
+              cd gitops/overlays/dev
+              ../../kustomize edit set image "$(params.image-name)@$(params.image-digest)"
+              git config user.name "Tekton Pipeline"
+              git config user.email "tekton@example.com"
+              git add .
+              git commit -m "Update image to $(params.image-digest)"
+              git push
+        params:
+          - name: gitops-repo-url
+          - name: image-name
+          - name: image-digest
+      params:
+        - name: gitops-repo-url
+          value: $(params.gitops-repo-url)
+        - name: image-name
+          value: $(params.image-name)
+        - name: image-digest
+          value: $(tasks.build-and-push.results.IMAGE_DIGEST)
+---
+# Example PipelineRun — customize and apply to trigger the pipeline
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: myapp-ci-run-
+spec:
+  pipelineRef:
+    name: myapp-ci
+  params:
+    - name: git-url
+      value: https://github.com/myorg/myapp.git
+    - name: git-revision
+      value: main
+    - name: image-name
+      value: quay.io/myorg/myapp-api
+    - name: gitops-repo-url
+      value: github.com/myorg/myapp-gitops.git
+  workspaces:
+    - name: shared-workspace
+      persistentVolumeClaim:
+        claimName: tekton-workspace-pvc
+    - name: docker-credentials
+      secret:
+        secretName: quay-credentials

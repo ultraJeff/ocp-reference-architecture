@@ -29,11 +29,14 @@ podman build -t myapp:dev .
 podman run --user 1001:0 myapp:dev
 
 # 3. Does it start without hardcoded config?
-podman run -e ConnectionStrings__Default="Server=localhost;..." myapp:dev
+#    .NET:    podman run -e ConnectionStrings__Default="Server=localhost;..." myapp:dev
+#    Java:    podman run -e SPRING_DATASOURCE_URL="jdbc:postgresql://localhost/mydb" myapp:dev
+#    Node.js: podman run -e DB_HOST=localhost -e DB_PORT=5432 myapp:dev
+podman run -e DB_HOST=localhost myapp:dev
 
 # 4. Do health endpoints work?
-curl http://localhost:8080/livez    # Should return 200
-curl http://localhost:8080/readyz   # Should return 200 (or 503 if no DB)
+curl http://localhost:8080/livez     # Should return 200
+curl http://localhost:8080/readyz    # Should return 200 (or 503 if no DB)
 
 # 5. Are logs going to stdout (not files)?
 podman logs <container-id>          # Should see structured JSON output
@@ -42,12 +45,13 @@ podman logs <container-id>          # Should see structured JSON output
 curl http://localhost:8080/metrics   # Should return Prometheus format
 ```
 
-## Multi-Stage Dockerfile Template
+## Multi-Stage Dockerfile Templates
 
-This pattern keeps your production image small and secure:
+These patterns keep your production image small and secure. Pick the one that matches your runtime.
+
+### .NET 10
 
 ```dockerfile
-# Build stage — SDK image, not shipped to prod
 FROM registry.access.redhat.com/ubi9/dotnet-100 AS build
 WORKDIR /src
 COPY *.csproj .
@@ -55,13 +59,66 @@ RUN dotnet restore
 COPY . .
 RUN dotnet publish -c Release -o /app
 
-# Runtime stage — minimal image, what actually runs in prod
 FROM registry.access.redhat.com/ubi9/dotnet-100-runtime AS runtime
 WORKDIR /app
 COPY --from=build /app .
-
-# Run as non-root
 USER 1001
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "MyApp.dll"]
+```
+
+### Java (Quarkus)
+
+```dockerfile
+FROM registry.access.redhat.com/ubi9/openjdk-21 AS build
+WORKDIR /build
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+COPY src ./src
+RUN mvn package -DskipTests -Dquarkus.package.jar.type=uber-jar
+
+FROM registry.access.redhat.com/ubi9/openjdk-21-runtime AS runtime
+WORKDIR /app
+COPY --from=build /build/target/*-runner.jar app.jar
+USER 1001
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+### Java (Spring Boot)
+
+```dockerfile
+FROM registry.access.redhat.com/ubi9/openjdk-21 AS build
+WORKDIR /build
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+COPY src ./src
+RUN mvn package -DskipTests
+
+FROM registry.access.redhat.com/ubi9/openjdk-21-runtime AS runtime
+WORKDIR /app
+COPY --from=build /build/target/*.jar app.jar
+USER 1001
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+### Node.js
+
+```dockerfile
+FROM registry.access.redhat.com/ubi9/nodejs-20 AS build
+WORKDIR /build
+COPY package*.json .
+RUN npm ci
+COPY . .
+RUN npm run build --if-present && npm prune --production
+
+FROM registry.access.redhat.com/ubi9/nodejs-20-minimal AS runtime
+WORKDIR /app
+COPY --from=build /build/node_modules ./node_modules
+COPY --from=build /build/dist ./dist
+COPY --from=build /build/package.json .
+USER 1001
+EXPOSE 8080
+ENTRYPOINT ["node", "dist/server.js"]
 ```

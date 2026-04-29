@@ -24,6 +24,8 @@ It is prescriptive by design: **Required** items are non-negotiable for producti
 | **Setting up CI/CD?** | See [CI/CD & GitOps Standards](cicd.html) |
 | **Need more than the baseline?** | Check the [Extension Catalog](extensions.html) |
 | **Local dev workflow?** | See the [Developer Inner Loop](developer-guide.html) |
+| **Need copy-paste manifests?** | Grab from the [Examples](examples/README.html) directory |
+| **Looking up an acronym?** | Check the [Glossary](glossary.html) |
 
 ---
 

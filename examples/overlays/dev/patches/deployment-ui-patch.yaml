@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-ui
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: ui
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          livenessProbe:
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            failureThreshold: 5
+          readinessProbe:
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            failureThreshold: 5

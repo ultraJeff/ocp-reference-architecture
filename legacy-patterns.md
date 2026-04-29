@@ -50,7 +50,7 @@ These code examples show the most impactful changes. Each is a real pattern team
 
 **Before** — in-memory session (breaks with multiple replicas):
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -59,7 +59,7 @@ builder.Services.AddSession(); // In-memory, lost on pod restart
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java (Spring Boot)</strong></summary>
 
 ```java
@@ -72,7 +72,7 @@ public String dashboard(HttpSession session) {
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js (Express)</strong></summary>
 
 ```javascript
@@ -84,7 +84,7 @@ app.use(session({ secret: 'keyboard-cat', resave: false }));
 
 **After** — externalized to Redis:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -101,7 +101,7 @@ builder.Services.AddSession(options =>
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java (Spring Boot)</strong></summary>
 
 ```java
@@ -120,7 +120,7 @@ public class SessionConfig {
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js (Express)</strong></summary>
 
 ```javascript
@@ -145,7 +145,7 @@ app.use(session({
 
 **Before** — hardcoded config baked into image:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```json
@@ -157,7 +157,7 @@ app.use(session({
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java</strong></summary>
 
 ```properties
@@ -168,7 +168,7 @@ spring.datasource.password=hunter2
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js</strong></summary>
 
 ```javascript
@@ -181,7 +181,7 @@ module.exports = {
 
 **After** — injected via environment variables, secrets managed externally:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -195,7 +195,7 @@ builder.Configuration.AddEnvironmentVariables();
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java (Spring Boot)</strong></summary>
 
 ```yaml
@@ -208,7 +208,7 @@ spring:
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js</strong></summary>
 
 ```javascript
@@ -227,7 +227,7 @@ module.exports = {
 
 **Before** — writing to files or Windows Event Log:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -238,7 +238,7 @@ Log.Logger = new LoggerConfiguration()
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java</strong></summary>
 
 ```xml
@@ -250,7 +250,7 @@ Log.Logger = new LoggerConfiguration()
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js</strong></summary>
 
 ```javascript
@@ -263,7 +263,7 @@ logStream.write(`${new Date().toISOString()} INFO: ${message}\n`);
 
 **After** — structured JSON to stdout, collected automatically by the platform:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -275,7 +275,7 @@ builder.Host.UseSerilog((context, config) => config
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java (Spring Boot / Logback)</strong></summary>
 
 ```xml
@@ -291,7 +291,7 @@ builder.Host.UseSerilog((context, config) => config
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js (Pino)</strong></summary>
 
 ```javascript
@@ -312,7 +312,7 @@ logger.info({ correlationId: req.headers['x-correlation-id'] }, 'Request receive
 
 **Before** — no health endpoints, or a simple "200 OK" that checks nothing:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -320,7 +320,7 @@ app.MapGet("/livez", () => "OK"); // Tells you nothing useful
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java</strong></summary>
 
 ```java
@@ -329,7 +329,7 @@ public String health() { return "OK"; } // Tells you nothing useful
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js</strong></summary>
 
 ```javascript
@@ -339,7 +339,7 @@ app.get('/livez', (req, res) => res.send('OK')); // Tells you nothing useful
 
 **After** — meaningful checks with separate liveness and readiness:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -368,7 +368,7 @@ app.MapHealthChecks("/readyz", new HealthCheckOptions
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java (Spring Boot Actuator)</strong></summary>
 
 ```yaml
@@ -388,7 +388,7 @@ management:
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js (Express)</strong></summary>
 
 ```javascript
@@ -412,7 +412,7 @@ app.get('/readyz', async (req, res) => {
 
 **Before** — manually creating HTTP clients, no retry logic:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET</strong></summary>
 
 ```csharp
@@ -422,7 +422,7 @@ var response = await client.GetAsync("http://other-service/api/data");
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java</strong></summary>
 
 ```java
@@ -433,7 +433,7 @@ InputStream is = conn.getInputStream();
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js</strong></summary>
 
 ```javascript
@@ -444,7 +444,7 @@ const resp = await fetch('http://other-service/api/data');
 
 **After** — managed clients with retry and circuit breaker:
 
-<details open>
+<details open markdown="1">
 <summary><strong>.NET (IHttpClientFactory + Standard Resilience)</strong></summary>
 
 ```csharp
@@ -470,7 +470,7 @@ public class OrderClient(IHttpClientFactory factory)
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Java (Spring Boot + Resilience4j)</strong></summary>
 
 ```java
@@ -509,7 +509,7 @@ public class OrderClient {
 ```
 </details>
 
-<details>
+<details markdown="1">
 <summary><strong>Node.js (cockatiel)</strong></summary>
 
 ```javascript

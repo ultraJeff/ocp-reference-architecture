@@ -23,18 +23,18 @@ It defines the non-negotiable requirements, recommended practices, and architect
 | **Application Onboarding Decision Tree** | Is my app ready for the platform, and who needs to do what? |
 | **Governance & Compliance Checklist** | How do I verify my app meets these standards? |
 
-## Contents
+## Live Site
 
-| File | Description |
-|------|-------------|
-| [baseline-app-architecture.md](baseline-app-architecture.md) | Full standards document with requirements, architecture patterns, maturity model, and compliance checklist |
+**[https://ultrajeff.github.io/ocp-reference-architecture/](https://ultrajeff.github.io/ocp-reference-architecture/)**
 
 ## How to Use
 
-1. **Onboarding a new app?** Start with the [Governance & Compliance Checklist](baseline-app-architecture.md#9-governance--compliance-checklist) to understand the bar
-2. **Modernizing an existing app?** Use the [Maturity Model](baseline-app-architecture.md#6-modernization-maturity-model) to assess current state and plan next steps
-3. **Building cloud-native?** Follow the [Architecture Standards](baseline-app-architecture.md#3-architecture-standards-by-tier) and the [Platform-Provided Capabilities](baseline-app-architecture.md#2-platform-provided-capabilities) to avoid reinventing the wheel
-4. **Need more than the baseline?** Check the [Extension Catalog](baseline-app-architecture.md#7-extension-catalog) for approved add-ons
+1. **Onboarding a new app?** Start with the [Onboarding Decision Tree](onboarding.md)
+2. **Modernizing a legacy app?** Use the [Legacy Patterns → Cloud-Native Rewrites](legacy-patterns.md) and [Maturity Model](maturity-model.md)
+3. **Building cloud-native?** Follow [Application Readiness](readiness.md) and [Architecture Standards](architecture.md)
+4. **Setting up CI/CD?** See [CI/CD & GitOps Standards](cicd.md)
+5. **Need more than the baseline?** Check the [Extension Catalog](extensions.md)
+6. **Local dev workflow?** See the [Developer Inner Loop](developer-guide.md)
 
 ## Related Red Hat Resources
 

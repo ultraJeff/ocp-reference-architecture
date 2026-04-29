@@ -36,5 +36,3 @@ It is prescriptive by design: **Required** items are non-negotiable for producti
 - [Red Hat Architecture and Design Patterns](https://developers.redhat.com/topics/red-hat-architecture-and-design-patterns)
 - [OpenShift Runtime Security Best Practices](https://www.redhat.com/en/blog/openshift-runtime-security-best-practices)
 - [14 Best Practices for Developing Applications on OpenShift](https://www.redhat.com/en/blog/14-best-practices-for-developing-applications-on-openshift)
-
-> **Single-file version:** The full document is also available as a [single markdown file](https://github.com/ultraJeff/ocp-reference-architecture/blob/main/baseline-app-architecture.md) for offline reading or sharing.

@@ -1,5 +1,7 @@
 title: Application Modernization Standards for OpenShift
 description: Prescriptive standards, patterns, and governance for deploying well-architected custom applications on Red Hat OpenShift Container Platform.
+baseurl: /ocp-reference-architecture
+url: https://ultrajeff.github.io
 remote_theme: just-the-docs/just-the-docs@v0.10.0
 plugins:
   - jekyll-remote-theme
@@ -17,4 +19,3 @@ exclude:
   - LICENSE
   - Gemfile
   - Gemfile.lock
-  - baseline-app-architecture.md

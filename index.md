@@ -18,12 +18,12 @@ It is prescriptive by design: **Required** items are non-negotiable for producti
 
 | Starting Point | Where to Go |
 |----------------|-------------|
-| **Onboarding a new app?** | Start with the [Onboarding Decision Tree]({% link onboarding.md %}) to assess readiness, then use the [Governance Checklist]({% link onboarding.md %}#governance--compliance-checklist) |
-| **Modernizing a legacy app?** | Use the [Legacy Patterns → Cloud-Native Rewrites]({% link legacy-patterns.md %}) for code-level changes, and the [Maturity Model]({% link maturity-model.md %}) to plan the journey |
-| **Building cloud-native from scratch?** | Follow [Application Readiness]({% link readiness.md %}) and [Architecture Standards]({% link architecture.md %}) |
-| **Setting up CI/CD?** | See [CI/CD & GitOps Standards]({% link cicd.md %}) |
-| **Need more than the baseline?** | Check the [Extension Catalog]({% link extensions.md %}) |
-| **Local dev workflow?** | See the [Developer Inner Loop]({% link developer-guide.md %}) |
+| **Onboarding a new app?** | Start with the [Onboarding Decision Tree](onboarding.html) to assess readiness, then use the [Governance Checklist](onboarding.html#governance--compliance-checklist) |
+| **Modernizing a legacy app?** | Use the [Legacy Patterns → Cloud-Native Rewrites](legacy-patterns.html) for code-level changes, and the [Maturity Model](maturity-model.html) to plan the journey |
+| **Building cloud-native from scratch?** | Follow [Application Readiness](readiness.html) and [Architecture Standards](architecture.html) |
+| **Setting up CI/CD?** | See [CI/CD & GitOps Standards](cicd.html) |
+| **Need more than the baseline?** | Check the [Extension Catalog](extensions.html) |
+| **Local dev workflow?** | See the [Developer Inner Loop](developer-guide.html) |
 
 ---
 

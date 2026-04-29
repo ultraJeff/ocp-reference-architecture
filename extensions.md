@@ -42,11 +42,11 @@ Every well-architected application on this platform follows this foundational pa
   │  ┌──────────────────────┐    ┌──────────────────────────┐               │
   │  │  Presentation Tier   │    │  API / Business Logic     │               │
   │  │                      │    │                           │               │
-  │  │  .NET 8+ / Kestrel   │    │  .NET 8+ / ASP.NET Core  │               │
+  │  │  .NET 10 / Kestrel   │    │  .NET 10 / ASP.NET Core  │               │
   │  │  Deployment (≥2)     │    │  Deployment (≥2)          │               │
   │  │  Service + Route     │    │  Service + Route          │               │
   │  │  HPA (CPU ≤70%)      │    │  HPA (CPU ≤70%)           │               │
-  │  │  /healthz + /ready   │    │  /healthz + /ready        │               │
+  │  │  /livez + /readyz    │    │  /livez + /readyz         │               │
   │  │  /metrics            │    │  /metrics                 │               │
   │  └──────────────────────┘    └──────────┬────────────────┘               │
   │                                         │                                │

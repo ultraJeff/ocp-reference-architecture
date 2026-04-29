@@ -15,7 +15,7 @@ nav_order: 3
 | Set minimum 2 replicas in production | Required |
 | Configure HPA with CPU target ≤ 70% | SHOULD |
 | Use a Route with TLS edge termination | Required |
-| Return a meaningful `/ready` and `/healthz` | Required |
+| Return a meaningful `/readyz` and `/livez` | Required |
 
 **.NET-specific guidance:**
 - Use ASP.NET Core with Kestrel as the web server — do not use IIS or HTTP.sys in-container
@@ -37,11 +37,11 @@ nav_order: 3
 | Use an internal Service (ClusterIP) for intra-cluster traffic; Route only for external-facing APIs | Required |
 
 **.NET-specific guidance:**
-- Target .NET 8+ (LTS) for all new development and modernization efforts. .NET Framework 4.x applications are migrated to .NET 8+ to run on Linux containers
+- Target .NET 10 (LTS) for all new development. .NET 8 (LTS) remains supported through November 2026 for existing applications. .NET Framework 4.x applications are migrated to .NET 10 to run on Linux containers
 - Use the `Microsoft.Extensions.Configuration` abstraction to bind environment variables and ConfigMaps to strongly-typed options classes
-- Use `IHttpClientFactory` with Polly for resilient HTTP calls (retry, circuit breaker, timeout) — do not instantiate `HttpClient` directly
-- Use ASP.NET Core's built-in health check framework (`Microsoft.Extensions.Diagnostics.HealthChecks`) for `/healthz` and `/ready` endpoints
-- Expose Prometheus metrics via `prometheus-net.AspNetCore` or OpenTelemetry .NET SDK
+- Use `IHttpClientFactory` with `AddStandardResilienceHandler()` from `Microsoft.Extensions.Http.Resilience` for resilient HTTP calls (retry, circuit breaker, timeout) — do not instantiate `HttpClient` directly
+- Use ASP.NET Core's built-in health check framework (`Microsoft.Extensions.Diagnostics.HealthChecks`) for `/livez` and `/readyz` endpoints
+- Expose Prometheus metrics via OpenTelemetry .NET SDK (preferred) or `prometheus-net.AspNetCore`
 - Connection strings for external databases (e.g., MSSQL) are injected via environment variables or mounted Secrets — never in `appsettings.json` baked into the image
 
 ## Data Tier

@@ -19,7 +19,7 @@ Modernizing isn't just about putting your app in a container. These are the spec
 | Windows Registry access | No registry in Linux containers | Environment variables or ConfigMaps |
 | Windows Event Log writes | Not available on Linux; not collected by platform logging | `ILogger` → structured JSON to stdout |
 | Scheduled tasks via Windows Task Scheduler or cron inside the container | Missed schedules on restart; duplicate execution across replicas | Kubernetes CronJobs for periodic tasks; Kubernetes Jobs for one-time work |
-| COM/DCOM interop or .NET Remoting | Not supported on .NET 8+ or Linux | gRPC for inter-service communication; REST APIs; message queues |
+| COM/DCOM interop or .NET Remoting | Not supported on modern .NET or Linux | gRPC for inter-service communication; REST APIs; message queues |
 | GAC (Global Assembly Cache) dependencies | Not available in containers | NuGet packages, self-contained deployments |
 
 ## Networking & Communication
@@ -113,7 +113,7 @@ builder.Host.UseSerilog((context, config) => config
 
 **Before** — no health endpoints, or a simple "200 OK" that checks nothing:
 ```csharp
-app.MapGet("/health", () => "OK"); // Tells you nothing useful
+app.MapGet("/livez", () => "OK"); // Tells you nothing useful
 ```
 
 **After** — meaningful checks using ASP.NET Core health check framework:
@@ -130,13 +130,13 @@ builder.Services.AddHealthChecks()
         tags: new[] { "ready" });
 
 // Liveness — is the process alive? Don't check dependencies here.
-app.MapHealthChecks("/healthz", new HealthCheckOptions
+app.MapHealthChecks("/livez", new HealthCheckOptions
 {
     Predicate = _ => false // No dependency checks — just "am I running?"
 });
 
 // Readiness — can I serve traffic? Check dependencies here.
-app.MapHealthChecks("/ready", new HealthCheckOptions
+app.MapHealthChecks("/readyz", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready")
 });
@@ -151,21 +151,17 @@ var client = new HttpClient();
 var response = await client.GetAsync("http://other-service/api/data");
 ```
 
-**After** — `IHttpClientFactory` with Polly retry and circuit breaker:
+**After** — `IHttpClientFactory` with standard resilience handler (retry, circuit breaker, timeout built in):
 ```csharp
-// Program.cs
+// Program.cs — uses Microsoft.Extensions.Http.Resilience (not the legacy Microsoft.Extensions.Http.Polly)
 builder.Services.AddHttpClient("OrderService", client =>
 {
     client.BaseAddress = new Uri(
         builder.Configuration["Services:OrderService:BaseUrl"]!);
-    client.Timeout = TimeSpan.FromSeconds(10);
 })
-.AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(
-    retryCount: 3,
-    sleepDurationProvider: attempt => TimeSpan.FromMilliseconds(200 * Math.Pow(2, attempt))))
-.AddTransientHttpErrorPolicy(p => p.CircuitBreakerAsync(
-    handledEventsAllowedBeforeBreaking: 5,
-    durationOfBreak: TimeSpan.FromSeconds(30)));
+.AddStandardResilienceHandler();
+// Includes: rate limiter, total timeout (30s), retry (3x exponential + jitter),
+// circuit breaker (10% failure ratio), and per-attempt timeout (10s) — all preconfigured.
 
 // In your service class — injected, pooled, resilient
 public class OrderClient(IHttpClientFactory factory)

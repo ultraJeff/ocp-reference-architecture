@@ -36,7 +36,7 @@ Every application namespace deploys NetworkPolicies:
 - Images are pulled from an approved registry (Quay, OpenShift internal registry, Red Hat registry)
 - Images are built in a CI pipeline — no `docker build` on developer laptops pushed to prod
 - Images pass ACS vulnerability scanning before deployment
-- Base images use Red Hat UBI (Universal Base Image) or an approved alternative. For .NET workloads, use `registry.access.redhat.com/ubi8/dotnet-80-runtime` (runtime) or `ubi8/dotnet-80` (SDK) images
+- Base images use Red Hat UBI (Universal Base Image) or an approved alternative. For .NET workloads, use `registry.access.redhat.com/ubi9/dotnet-100-runtime` (runtime) or `ubi9/dotnet-100` (SDK) images
 - Image tags use immutable references (SHA digests) in production GitOps manifests, not `:latest`
 
 ## RBAC
@@ -56,4 +56,4 @@ The standards above cover how the platform protects workloads. These standards c
 | **Dependency hygiene** | Pin dependency versions. Run `dotnet list package --vulnerable` (or equivalent) in CI. Update regularly | Use wildcard version ranges in production. Ignore vulnerability scan results from ACS/Quay |
 | **Don't log secrets** | Scrub sensitive fields (tokens, passwords, SSNs, PII) before logging. Use structured logging with explicit field selection | Log full request/response bodies in production. Use `ToString()` on objects that may contain credentials |
 | **Read-only root filesystem** | Set `readOnlyRootFilesystem: true` in your security context. Write temp data to `EmptyDir` volumes mounted at `/tmp` | Assume your container needs a writable filesystem. Most apps don't — and a read-only root blocks many exploit techniques |
-| **Minimize base image** | Use runtime-only images (`ubi8/dotnet-80-runtime`, not the SDK image). Use multi-stage builds to keep build tools out of production | Ship the SDK, build tools, or debugging utilities in your production image. Smaller image = smaller attack surface |
+| **Minimize base image** | Use runtime-only images (`ubi9/dotnet-100-runtime`, not the SDK image). Use multi-stage builds to keep build tools out of production | Ship the SDK, build tools, or debugging utilities in your production image. Smaller image = smaller attack surface |

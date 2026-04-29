@@ -32,8 +32,8 @@ podman run --user 1001:0 myapp:dev
 podman run -e ConnectionStrings__Default="Server=localhost;..." myapp:dev
 
 # 4. Do health endpoints work?
-curl http://localhost:8080/healthz   # Should return 200
-curl http://localhost:8080/ready     # Should return 200 (or 503 if no DB)
+curl http://localhost:8080/livez    # Should return 200
+curl http://localhost:8080/readyz   # Should return 200 (or 503 if no DB)
 
 # 5. Are logs going to stdout (not files)?
 podman logs <container-id>          # Should see structured JSON output
@@ -48,7 +48,7 @@ This pattern keeps your production image small and secure:
 
 ```dockerfile
 # Build stage — SDK image, not shipped to prod
-FROM registry.access.redhat.com/ubi8/dotnet-80 AS build
+FROM registry.access.redhat.com/ubi9/dotnet-100 AS build
 WORKDIR /src
 COPY *.csproj .
 RUN dotnet restore
@@ -56,7 +56,7 @@ COPY . .
 RUN dotnet publish -c Release -o /app
 
 # Runtime stage — minimal image, what actually runs in prod
-FROM registry.access.redhat.com/ubi8/dotnet-80-runtime AS runtime
+FROM registry.access.redhat.com/ubi9/dotnet-100-runtime AS runtime
 WORKDIR /app
 COPY --from=build /app .
 

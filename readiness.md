@@ -26,8 +26,8 @@ Every application component implements the following endpoints:
 
 | Endpoint | Purpose | Implementation |
 |----------|---------|----------------|
-| **Readiness probe** (`/ready`) | Signals the pod is ready to accept traffic | Returns 200 when the app can serve requests. Return 503 during startup or when downstream dependencies are unavailable |
-| **Liveness probe** (`/healthz`) | Signals the process is alive and not deadlocked | Returns 200 if the process is running. Do NOT check downstream dependencies here — that causes cascading restarts |
+| **Readiness probe** (`/readyz`) | Signals the pod is ready to accept traffic | Returns 200 when the app can serve requests. Return 503 during startup or when downstream dependencies are unavailable |
+| **Liveness probe** (`/livez`) | Signals the process is alive and not deadlocked | Returns 200 if the process is running. Do NOT check downstream dependencies here — that causes cascading restarts |
 | **Startup probe** (if needed) | Protects slow-starting apps from premature liveness kills | Use `failureThreshold × periodSeconds` to define a startup budget |
 | **Graceful shutdown** | Handles `SIGTERM` cleanly | Drain in-flight requests, close DB connections, flush buffers. Default grace period: 30s |
 
@@ -44,7 +44,7 @@ Applications are not production-ready until they are observable. Every component
 **Metrics:**
 - Expose a Prometheus-compatible `/metrics` endpoint
 - At minimum, expose: request count, request latency (histogram), error rate, and saturation (active connections/threads)
-- Follow the [RED method](https://www.weave.works/blog/the-red-method-key-metrics-for-microservices-architecture/): Rate, Errors, Duration
+- Follow the [RED method](https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/): Rate, Errors, Duration
 
 **Tracing (SHOULD):**
 - Instrument with OpenTelemetry SDK

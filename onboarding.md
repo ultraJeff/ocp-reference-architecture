@@ -16,7 +16,7 @@ Is the application containerized?
 │   ├── NO (hard OS/kernel dependencies, proprietary runtime)
 │   │   → Not a candidate for OpenShift. Escalate for alternative hosting.
 │   └── YES → Proceed to containerization (target Maturity Level 1)
-│       ├── .NET apps: target .NET 8+ on UBI base images
+│       ├── .NET apps: target .NET 10 (LTS) on UBI 9 base images
 │       └── Other stacks: target supported runtime on UBI base images
 │
 └── YES → Does it run as non-root?
@@ -32,7 +32,7 @@ Is the application containerized?
             ├── NO → Migrate hardcoded config to env vars / ConfigMaps / Secrets
             │
             └── YES → Does it implement health probes?
-                ├── NO → Implement /healthz and /ready endpoints
+                ├── NO → Implement /livez and /readyz endpoints
                 │
                 └── YES → Does it log structured output to stdout?
                     ├── NO → Migrate logging to structured JSON on stdout
@@ -120,8 +120,8 @@ Use this as a starting point. Fill in the sections relevant to your application.
 ## Key Endpoints
 | Endpoint | Purpose |
 |----------|---------|
-| `/healthz` | Liveness — is the process alive? |
-| `/ready` | Readiness — can it serve traffic? |
+| `/livez` | Liveness — is the process alive? |
+| `/readyz` | Readiness — can it serve traffic? |
 | `/metrics` | Prometheus metrics |
 | [app-specific] | [e.g., `/api/v1/status` for business health] |
 
@@ -158,7 +158,7 @@ Use this as a starting point. Fill in the sections relevant to your application.
 ## Rollback Procedure
 1. Identify last known good commit in GitOps repo
 2. Revert in GitOps repo or use ArgoCD to sync to previous commit
-3. Verify rollback: check `/ready` endpoint returns 200
+3. Verify rollback: check `/readyz` endpoint returns 200
 
 ## Escalation Path
 1. **L1 (on-call):** [team/person], [Slack channel]
